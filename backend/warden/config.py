@@ -17,9 +17,15 @@ DEMO_REPO_URL = os.getenv("DEMO_REPO_URL", "https://github.com/GoogleCloudPlatfo
 DEMO_REF = os.getenv("DEMO_REF", "v0.8.0")
 HISTORY_SINCE = os.getenv("HISTORY_SINCE", "2022-06-15")
 
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.groq.com/openai/v1").rstrip("/")
+LLM_API_KEY = os.getenv("LLM_API_KEY") or None
+LLM_MODEL = os.getenv("LLM_MODEL", "openai/gpt-oss-120b")
+
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN") or None
 GITHUB_OWNER = os.getenv("GITHUB_OWNER") or None
 GITHUB_REPO = os.getenv("GITHUB_REPO", "microservices-demo")
+# Branch Warden opens PRs against (the fork branch pinned to DEMO_REF); empty = the fork's default branch.
+GITHUB_BASE = os.getenv("GITHUB_BASE", "demo-base") or None
 
 DATA_DIR = BACKEND_DIR / "data"
 RAW_DIR = DATA_DIR / "raw"
