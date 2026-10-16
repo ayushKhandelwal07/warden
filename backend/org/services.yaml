@@ -1,0 +1,13 @@
+# Short service descriptions (paraphrased from the Online Boutique README).
+frontend: Serves the shop website over HTTP and creates a session ID for every visitor.
+cartservice: Stores and reads each visitor's shopping cart in Redis.
+productcatalogservice: Lists products from a JSON catalog, with search and product lookup.
+currencyservice: Converts money between currencies using European Central Bank rates; the highest-traffic service.
+paymentservice: Charges the given credit card (mock) and returns a transaction ID.
+shippingservice: Quotes shipping costs for a cart and ships to the given address (mock).
+emailservice: Sends the order confirmation email (mock).
+checkoutservice: Reads the cart, prepares the order, and orchestrates payment, shipping, and the confirmation email.
+recommendationservice: Recommends products based on what is in the cart.
+adservice: Serves text ads for the given context words.
+loadgenerator: Sends a steady stream of realistic shopping traffic to the frontend.
+redis-cart: Redis store that holds shopping carts.

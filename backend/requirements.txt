@@ -1,0 +1,11 @@
+falkordb
+fastapi
+uvicorn[standard]
+httpx
+pydantic
+pyyaml
+python-dotenv
+pytest
+mcp[cli]
+cvss
+packaging

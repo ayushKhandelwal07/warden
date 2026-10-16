@@ -1,0 +1,28 @@
+# CURATED for the demo org (disclosed in the README): which services handle sensitive data.
+# weight feeds the risk score of an attack path that ends at a service reading this data.
+data_assets:
+  - name: CardData
+    sensitivity: PCI
+    weight: 5
+    description: Credit card number, CVV and expiry sent for payment.
+    read_by: [paymentservice, checkoutservice]
+  - name: CustomerEmail
+    sensitivity: PII
+    weight: 3
+    description: Customer email address used for order confirmations.
+    read_by: [emailservice, checkoutservice]
+  - name: ShippingAddress
+    sensitivity: PII
+    weight: 3
+    description: Customer street address for shipping quotes and delivery.
+    read_by: [shippingservice, checkoutservice]
+  - name: SessionCart
+    sensitivity: SESSION
+    weight: 2
+    description: Session ID and cart contents.
+    read_by: [cartservice, redis-cart, frontend]
+  - name: OrderData
+    sensitivity: ORDER
+    weight: 2
+    description: Order IDs, items, totals.
+    read_by: [checkoutservice]

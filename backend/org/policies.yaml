@@ -1,0 +1,30 @@
+# CURATED for the demo org (disclosed in the README): remediation policies the agent must apply and cite.
+policies:
+  - id: POL-KEV-48H
+    rule_text: A vulnerability on the CISA KEV list that is reachable from the internet must be fixed within 48 hours.
+    scope: global
+    priority: 1
+    conditions: {kev: true, reachable: true}
+    due_hours: 48
+    source: Modeled on CISA BOD 22-01 remediation deadlines.
+  - id: POL-CRITICAL-7D
+    rule_text: A CRITICAL vulnerability reachable from the internet must be fixed within 7 days; HIGH within 30 days.
+    scope: global
+    priority: 2
+    conditions: {severity: [CRITICAL, HIGH], reachable: true}
+    due_hours: 168
+    source: ADR-006 Dependency update policy.
+  - id: POL-INTERNAL-MEDIUM-BACKLOG
+    rule_text: MEDIUM or LOW vulnerabilities in services not reachable from the internet may go to the backlog.
+    scope: global
+    priority: 3
+    conditions: {severity: [MEDIUM, LOW], reachable: false}
+    due_hours: null
+    source: ADR-009 Internal-only services may defer MEDIUM findings.
+  - id: POL-PCI-REVIEW
+    rule_text: Any change to a service that reads PCI data needs a review from the Payments team.
+    scope: data:PCI
+    priority: 1
+    conditions: {data_sensitivity: PCI}
+    due_hours: null
+    source: ADR-003 Payment data handling.

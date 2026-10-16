@@ -1,0 +1,29 @@
+# CURATED for the demo org (disclosed in the README): teams and service ownership.
+# Real people from the upstream history are never assigned to these teams.
+# `reviewers` are GitHub handles that may be requested as reviewers on OUR fork
+# (fork collaborators only); fill them in via .env WARDEN_REVIEWERS_<SLUG> or here.
+teams:
+  - slug: web
+    name: Web Storefront
+    owns: [frontend, adservice]
+    reviewers: []
+  - slug: payments
+    name: Payments
+    owns: [checkoutservice, paymentservice]
+    reviewers: []
+  - slug: catalog
+    name: Catalog & Discovery
+    owns: [productcatalogservice, recommendationservice]
+    reviewers: []
+  - slug: cart
+    name: Cart
+    owns: [cartservice, redis-cart]
+    reviewers: []
+  - slug: fulfillment
+    name: Fulfillment
+    owns: [shippingservice, emailservice, currencyservice]
+    reviewers: []
+  - slug: platform
+    name: Platform
+    owns: [loadgenerator]
+    reviewers: []
