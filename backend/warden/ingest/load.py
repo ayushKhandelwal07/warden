@@ -177,6 +177,18 @@ def derive_expertise(g: str | None = None):
     )
 
 
+def record_run(run: int, ref: str, sha: str, kev: dict, g: str | None = None):
+    """Provenance for the UI status bar and the closed loop: which commit and KEV feed the graph reflects."""
+    rw(
+        """MATCH (c:Catalog {name: 'CISA KEV'})
+        SET c.catalog_version = $kv, c.released = $kr, c.entries = $kc
+        MERGE (r:IngestRun {id: $run})
+        SET r.ref = $ref, r.sha = $sha, r.at = $run, r.kev_version = $kv""",
+        {"run": run, "ref": ref, "sha": sha, "kv": kev.get("version"), "kr": kev.get("released"), "kc": kev.get("count")},
+        g,
+    )
+
+
 def prune_stale(run: int, g: str | None = None) -> dict:
     removed = {}
     for rel in STRUCTURAL:

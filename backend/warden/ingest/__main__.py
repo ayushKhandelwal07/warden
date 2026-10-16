@@ -56,6 +56,9 @@ def run(ref: str, fresh: bool, snapshot: bool, fetch: bool, use_nvd: bool) -> di
     if any(removed.values()):
         print(f"  pruned stale edges: { {k: v for k, v in removed.items() if v} }")
 
+    kev = intel.kev_meta()
+    load.record_run(run_id, ref, sha, kev, g)
+
     counts, _ = ro("MATCH (n) RETURN labels(n)[0] AS label, count(n) AS n ORDER BY n DESC", graph_name=g)
     if snapshot:
         copy_graph(g, config.golden_graph_name())

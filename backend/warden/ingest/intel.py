@@ -14,6 +14,11 @@ def load_kev(refresh: bool = False) -> dict[str, dict]:
     return {v["cveID"]: v for v in data["vulnerabilities"]}
 
 
+def kev_meta() -> dict:
+    data = cached_json("kev", "catalog", lambda: http_get_json(KEV_URL))
+    return {"version": data.get("catalogVersion"), "released": data.get("dateReleased"), "count": data.get("count")}
+
+
 def load_epss(cves: list[str], refresh: bool = False) -> dict[str, dict]:
     out = {}
     cves = sorted(set(cves))
