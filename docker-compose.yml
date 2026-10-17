@@ -9,5 +9,23 @@ services:
       - falkordb-data:/var/lib/falkordb/data
     restart: unless-stopped
 
+  # The backend as it runs in production. Opt-in: `docker compose --profile api up -d --build`
+  api:
+    profiles: ["api"]
+    build: ./backend
+    container_name: warden-api
+    depends_on: [falkordb]
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      FALKORDB_HOST: falkordb
+      FALKORDB_PORT: "6379"
+      FALKORDB_SSL: "false"
+      CORS_ORIGINS: http://localhost:5173
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
 volumes:
   falkordb-data:
