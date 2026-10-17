@@ -30,8 +30,11 @@ def ro(cypher: str, params: dict | None = None, graph_name: str | None = None):
 
 
 def rw(cypher: str, params: dict | None = None, graph_name: str | None = None):
+    from warden import cache
+
     t0 = time.perf_counter()
     res = graph(graph_name).query(cypher, params or {})
+    cache.bump(graph_name or config.org_graph_name())
     return _rows(res), round((time.perf_counter() - t0) * 1000, 2)
 
 
@@ -59,11 +62,17 @@ def graph_exists(name: str) -> bool:
 
 
 def copy_graph(src: str, dst: str) -> None:
+    from warden import cache
+
     if graph_exists(dst):
         db().select_graph(dst).delete()
     db().select_graph(src).copy(dst)
+    cache.bump(dst)
 
 
 def delete_graph(name: str) -> None:
+    from warden import cache
+
     if graph_exists(name):
         db().select_graph(name).delete()
+    cache.bump(name)

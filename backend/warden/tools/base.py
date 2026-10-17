@@ -146,7 +146,20 @@ def _jsonable(v):
     return str(v)
 
 
-def run_tool(name: str, args: dict | None = None, graph_name: str | None = None) -> dict:
+def run_tool(name: str, args: dict | None = None, graph_name: str | None = None, use_cache: bool = True) -> dict:
+    """Runs a tool; read-only results are cached per graph version (see warden.cache)."""
+    if not use_cache or name not in REGISTRY:
+        return _run_tool(name, args, graph_name)
+    from warden import cache
+
+    t0 = time.perf_counter()
+    out, hit = cache.cached(f"tool:{name}", args or {}, lambda: _run_tool(name, args, graph_name), graph_name)
+    if hit:
+        out = {**out, "cached": True, "ms": round((time.perf_counter() - t0) * 1000, 2)}
+    return out
+
+
+def _run_tool(name: str, args: dict | None = None, graph_name: str | None = None) -> dict:
     t0 = time.perf_counter()
     if name not in REGISTRY:
         return {"tool": name, "args": args or {}, "error": f"unknown tool '{name}'", "rows": [], "queries": [], "ms": 0}

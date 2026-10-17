@@ -219,4 +219,7 @@ def prune_stale(run: int, g: str | None = None) -> dict:
     removed["orphan_packages"] = rows[0]["n"] if rows else 0
     rows, _ = rw("MATCH (v:Vulnerability) WHERE NOT ()-[:AFFECTED_BY]->(v) DETACH DELETE v RETURN count(v) AS n", graph_name=g)
     removed["orphan_vulnerabilities"] = rows[0]["n"] if rows else 0
+    # An exposure that was removed (a Service made internal again) leaves its Ingress behind.
+    rows, _ = rw("MATCH (i:Ingress) WHERE NOT (i)--() DELETE i RETURN count(i) AS n", graph_name=g)
+    removed["orphan_ingresses"] = rows[0]["n"] if rows else 0
     return removed

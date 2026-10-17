@@ -6,6 +6,7 @@ import os
 
 import asyncio
 import json
+import time
 from contextlib import asynccontextmanager
 
 from fastapi import Body, FastAPI
@@ -16,7 +17,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 import yaml
 
-from warden import agent, config, impact, mcp_client, planner, proposals, sync, watch
+from warden import agent, config, conversations, db, impact, mcp_client, planner, proposals, sync, watch
+from warden.api import accounts
 from warden.tools.base import ToolError
 from warden.actions import approvals, github, patches
 from warden.graph import overview
@@ -24,6 +26,7 @@ from warden.tools import REGISTRY, run_tool
 
 @asynccontextmanager
 async def lifespan(_app):
+    await asyncio.to_thread(db.init_db)
     # One MCP stdio session for the agent, opened and closed in the same task.
     try:
         await agent.MCP.start()
@@ -37,7 +40,11 @@ async def lifespan(_app):
 
 app = FastAPI(title="Warden API", lifespan=lifespan)
 # The frontend can be deployed separately (Vercel) and call this API cross-origin.
-app.add_middleware(CORSMiddleware, allow_origins=config.CORS_ORIGINS, allow_methods=["GET", "POST"], allow_headers=["Content-Type"])
+app.add_middleware(accounts.ProjectScope)
+# Added last = outermost, so even a 401 from the scope middleware carries CORS headers.
+app.add_middleware(CORSMiddleware, allow_origins=config.CORS_ORIGINS, allow_credentials=True,
+                   allow_methods=["GET", "POST", "PATCH", "DELETE"], allow_headers=["Content-Type", "X-Project"])
+app.include_router(accounts.router)
 
 BROWSER_URL = os.getenv("FALKORDB_BROWSER_URL", "http://localhost:3000")
 
@@ -57,13 +64,47 @@ def list_tools():
 
 
 @app.post("/api/tools/{name}")
-def call_tool(name: str, args: dict = Body(default_factory=dict)):
+def call_tool(name: str, args: dict = Body(default_factory=dict), save: bool = True):
+    """Runs one graph tool. Explicit runs are kept in the user's recent runs (save=false for previews)."""
     if name not in REGISTRY:
         return JSONResponse(status_code=404, content={"error": f"unknown tool '{name}'"})
     try:
-        return run_tool(name, args)
+        result = run_tool(name, args)
     except Exception as e:  # graph down mid-call: report, don't 500 with a stack trace
         return JSONResponse(status_code=503, content={"error": str(e)[:200]})
+    if save:
+        from warden.db.models import ToolRun
+
+        with db.session() as s:
+            row = ToolRun(project_id=accounts.project()["id"], user_id=accounts.user()["id"], tool=name, args=result.get("args") or args,
+                          summary=result.get("error") or result.get("summary"), result=json.loads(json.dumps(result, default=str)))
+            s.add(row)
+            s.flush()
+            result = {**result, "run_id": row.id}
+    return result
+
+
+@app.get("/api/tool-runs")
+def tool_runs():
+    from sqlalchemy import select
+
+    from warden.db.models import ToolRun
+
+    with db.session() as s:
+        rows = s.scalars(select(ToolRun).where(ToolRun.project_id == accounts.project()["id"], ToolRun.user_id == accounts.user()["id"])
+                         .order_by(ToolRun.created_at.desc()).limit(30))
+        return [{"id": r.id, "tool": r.tool, "args": r.args, "summary": r.summary, "created_at": r.created_at.isoformat()} for r in rows]
+
+
+@app.get("/api/tool-runs/{rid}")
+def tool_run(rid: str):
+    from warden.db.models import ToolRun
+
+    with db.session() as s:
+        r = s.get(ToolRun, rid)
+        if not r or r.user_id != accounts.user()["id"] or r.project_id != accounts.project()["id"]:
+            return JSONResponse(status_code=404, content={"error": "No such tool run."})
+        return {"id": r.id, "tool": r.tool, "args": r.args, "created_at": r.created_at.isoformat(), "result": r.result}
 
 
 @app.get("/api/mcp")
@@ -81,7 +122,7 @@ def create_plan(body: dict = Body(default_factory=dict)):
     try:
         max_fixes = max(1, min(8, int(body.get("max_fixes", 5))))
         plan = planner.build_plan(max_fixes)
-        approval, blocked = proposals.file_fix_plan(plan, requested_by="you", trigger={"why": "Requested from the UI"})
+        approval, blocked = proposals.file_fix_plan(plan, requested_by=accounts.user()["name"], trigger={"why": "Requested from the UI"})
         return {"approval": approval, "plan": plan, "blocked": blocked}
     except Exception as e:
         return JSONResponse(status_code=503, content={"error": f"{type(e).__name__}: {str(e)[:200]}"})
@@ -116,7 +157,19 @@ def pr_impact(body: dict = Body(default_factory=dict)):
              "services": [s["service"] for s in report["services"]]},
             requested_by="impact analysis",
         )
-    return {"report": report, "approval": approval}
+    run_id = _save_impact_run(number, source, report, approval)
+    return {"report": report, "approval": approval, "run_id": run_id}
+
+
+def _save_impact_run(number: int, source: str, report: dict, approval: dict | None) -> str:
+    """Each analysis is kept as a run (its own URL, renamable, shareable), like a chat."""
+    u, p = accounts.user(), accounts.project()
+    with db.session() as s:
+        c = conversations.create(s, u["id"], p["id"], "impact", f"#{number} {report.get('title') or ''}".strip()[:120])
+        conversations.add_message(s, u["id"], p["id"], c.id, "user", f"Analyze PR #{number} ({source})", {"pr": number, "source": source})
+        conversations.add_message(s, u["id"], p["id"], c.id, "assistant", report.get("summary") or "",
+                                  json.loads(json.dumps({"report": report, "approval": approval}, default=str)))
+        return c.id
 
 
 @app.get("/api/agent")
@@ -125,11 +178,30 @@ def agent_status():
             "via": "mcp" if agent.MCP.client else "direct", "tools": len(agent.MCP.tools) + len(agent.LOCAL_TOOLS) if agent.MCP.client else None}
 
 
+def _start_turn(user_id: str, project_id: str, cid: str | None, question: str) -> tuple[str, str, list[dict]]:
+    """Opens (or creates) the chat, reads its history for the model, then records the new question."""
+    with db.session() as s:
+        if not cid:
+            title = question if len(question) <= 80 else question[:77].rsplit(" ", 1)[0] + "…"
+            cid = conversations.create(s, user_id, project_id, "ask", title).id
+        history = conversations.history(s, user_id, project_id, cid)
+        conversations.add_message(s, user_id, project_id, cid, "user", question)
+        return cid, s.get(conversations.Conversation, cid).title, history
+
+
+def _save_answer(user_id: str, project_id: str, cid: str, answer: str, events: list[dict]):
+    with db.session() as s:
+        conversations.add_message(s, user_id, project_id, cid, "assistant", answer,
+                                  {"events": json.loads(json.dumps(events, default=str))})
+
+
 @app.post("/api/ask")
 async def ask(body: dict = Body(default_factory=dict)):
-    """Streams one agent turn as server-sent events: start, tool_call, tool_result, correction, answer."""
+    """Streams one agent turn as server-sent events: conversation, start, tool_call, tool_result, correction, answer.
+    Each turn is saved to the chat (created on the first question), so it survives a reload and has a URL."""
     question = str(body.get("question") or "").strip()[:1000]
-    history = [m for m in (body.get("history") or []) if m.get("role") in ("user", "assistant") and isinstance(m.get("content"), str)][-8:]
+    cid = str(body.get("conversation_id") or "") or None
+    u, p = accounts.user(), accounts.project()
 
     def sse(ev: dict) -> str:
         return "data: " + json.dumps(ev, default=str) + "\n\n"
@@ -139,12 +211,68 @@ async def ask(body: dict = Body(default_factory=dict)):
             yield sse({"type": "error", "message": "Ask a question."})
             return
         try:
+            chat_id, title, history = await asyncio.to_thread(_start_turn, u["id"], p["id"], cid, question)
+        except (conversations.NotFound, PermissionError) as e:
+            yield sse({"type": "error", "message": str(e)})
+            return
+        yield sse({"type": "conversation", "id": chat_id, "title": title})
+        seen: list[dict] = []
+        answer = ""
+        try:
             async for ev in agent.run_turn(question, history):
+                seen.append(ev)
+                if ev.get("type") == "answer":
+                    answer = ev.get("text") or ""
                 yield sse(ev)
         except Exception as e:
-            yield sse({"type": "error", "message": f"{type(e).__name__}: {str(e)[:300]}"})
+            ev = {"type": "error", "message": f"{type(e).__name__}: {str(e)[:300]}"}
+            seen.append(ev)
+            yield sse(ev)
+        finally:  # also on a client disconnect: keep what the agent already found
+            await asyncio.shield(asyncio.to_thread(_save_answer, u["id"], p["id"], chat_id, answer, seen))
 
     return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+# ---- saved chats and PR analyses ----
+
+def _conv_error(e: Exception):
+    return JSONResponse(status_code=404 if isinstance(e, conversations.NotFound) else 403, content={"error": str(e)})
+
+
+@app.get("/api/conversations")
+def list_conversations(kind: str = "ask"):
+    with db.session() as s:
+        return conversations.list_for(s, accounts.user()["id"], accounts.project()["id"], kind)
+
+
+@app.get("/api/conversations/{cid}")
+def get_conversation(cid: str):
+    try:
+        with db.session() as s:
+            return conversations.get(s, accounts.user()["id"], accounts.project()["id"], cid)
+    except (conversations.NotFound, PermissionError) as e:
+        return _conv_error(e)
+
+
+@app.patch("/api/conversations/{cid}")
+def update_conversation(cid: str, body: dict = Body(default_factory=dict)):
+    try:
+        with db.session() as s:
+            return conversations.update(s, accounts.user()["id"], accounts.project()["id"], cid,
+                                        title=body.get("title"), shared=body.get("shared"))
+    except (conversations.NotFound, PermissionError) as e:
+        return _conv_error(e)
+
+
+@app.delete("/api/conversations/{cid}")
+def delete_conversation(cid: str):
+    try:
+        with db.session() as s:
+            conversations.delete(s, accounts.user()["id"], accounts.project()["id"], cid)
+        return {"ok": True}
+    except (conversations.NotFound, PermissionError) as e:
+        return _conv_error(e)
 
 
 @app.get("/api/watch")
@@ -227,10 +355,18 @@ def list_approvals():
     return approvals.list_all()
 
 
+@app.get("/api/approvals/{aid}")
+def get_approval(aid: str):
+    a = approvals.get(aid) if aid.startswith("apr_") else None
+    if not a:
+        return JSONResponse(status_code=404, content={"error": "No such approval in this project."})
+    return a
+
+
 @app.post("/api/approvals/{aid}/approve")
 def approve(aid: str):
     try:
-        return approvals.approve(aid)
+        return approvals.approve(aid, by=accounts.user()["name"])
     except ValueError as e:
         return JSONResponse(status_code=409, content={"error": str(e)})
 
@@ -241,7 +377,7 @@ def reject(aid: str, body: dict = Body(default_factory=dict)):
     if not reason:
         return JSONResponse(status_code=400, content={"error": "Say why you're rejecting it; the reason is recorded."})
     try:
-        return approvals.reject(aid, reason)
+        return approvals.reject(aid, reason, by=accounts.user()["name"])
     except ValueError as e:
         return JSONResponse(status_code=409, content={"error": str(e)})
 
@@ -256,10 +392,33 @@ def github_status():
         return {"configured": False, "reason": str(e)}
 
 
+_PUBLIC_CACHE: dict = {}
+
+
+@app.get("/api/public/overview")
+def public_overview():
+    """The landing page's live numbers and KEV path, always from the shared demo graph (read-only, cached 60 s)."""
+    hit = _PUBLIC_CACHE.get("v")
+    if hit and time.time() - hit[0] < 60:
+        return hit[1]
+    token = config.CURRENT_GRAPH.set(None)  # the demo graph, whoever is asking
+    try:
+        body = {"totals": overview.totals(), "hero": overview.kev_hero(), "health": overview.health()}
+    except Exception as e:
+        return JSONResponse(status_code=503, content={"error": str(e)[:200]})
+    finally:
+        config.CURRENT_GRAPH.reset(token)
+    _PUBLIC_CACHE["v"] = (time.time(), body)
+    return body
+
+
 @app.get("/api/overview")
 def get_overview():
     try:
-        return {"totals": overview.totals(), "hero": overview.kev_hero()}
+        from warden import cache
+
+        body, _hit = cache.cached("overview", {}, lambda: {"totals": overview.totals(), "hero": overview.kev_hero()})
+        return body
     except Exception as e:
         return JSONResponse(status_code=503, content={"error": str(e)[:200]})
 

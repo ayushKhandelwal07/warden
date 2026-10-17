@@ -9,3 +9,6 @@ pytest
 mcp[cli]
 cvss
 packaging
+sqlalchemy
+psycopg[binary]
+argon2-cffi

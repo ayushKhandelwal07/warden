@@ -11,7 +11,9 @@ from warden.graph.client import ro, rw
 
 
 def agents_graph() -> str:
-    return f"agents_{config.TENANT}"
+    """Shared agent state for the current project's graph (agents_demo for the demo project)."""
+    g = config.org_graph_name()
+    return f"agents_{config.TENANT}" if g == f"org_{config.TENANT}" else f"agents_{g}"
 
 
 def _now() -> int:

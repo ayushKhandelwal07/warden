@@ -199,8 +199,10 @@ def verify(answer: str, results: list[dict], services: set[str]) -> dict:
 async def run_turn(question: str, history: list[dict] | None = None) -> AsyncIterator[dict]:
     t0 = time.perf_counter()
     services, _ = _known_entities()
-    tools = MCP.tools + LOCAL_TOOLS if MCP.client else [*(_direct_tools()), *LOCAL_TOOLS]
-    via = "mcp" if MCP.client else "direct"
+    # The MCP server process reads the default (demo) graph; other projects' graphs are queried in-process.
+    use_mcp = bool(MCP.client) and config.org_graph_name() == f"org_{config.TENANT}"
+    tools = MCP.tools + LOCAL_TOOLS if use_mcp else [*(_direct_tools()), *LOCAL_TOOLS]
+    via = "mcp" if use_mcp else "direct"
     messages = [{"role": "system", "content": SYSTEM}, *(history or [])[-8:], {"role": "user", "content": question}]
     results: list[dict] = []
     corrected = False
@@ -221,7 +223,7 @@ async def run_turn(question: str, history: list[dict] | None = None) -> AsyncIte
                 try:
                     if name in ("propose_fix_plan", "analyze_pr"):
                         res = await _run_local(name, args)
-                    elif MCP.client:
+                    elif use_mcp:
                         res = await MCP.call(name, args)
                     else:
                         res = await asyncio.to_thread(run_tool, name, args)
