@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { useProject } from "../lib/auth";
 import { ArrowRight, Check, ChevronDown, LoaderCircle, ShieldAlert, ShieldCheck } from "lucide-react";
 import type { Evidence, ToolResult } from "../lib/api";
 import type { AgentEvent } from "../lib/ask";
@@ -75,12 +76,15 @@ export function Answer({ text }: { text: string }) {
 }
 
 /** One exchange: the question bubble, then a compact answer bubble. Tap the answer to show its evidence. */
-export function ChatTurn({ turn, selected, onSelect }: { turn: Turn; selected: boolean; onSelect: () => void }) {
+/** One question and its answer. `onEvidence` pins this answer's path in the evidence panel (or sheet on phones). */
+export function ChatTurn({ turn, selected, onEvidence }: { turn: Turn; selected: boolean; onEvidence: () => void }) {
+  const { to } = useProject();
   const [trace, setTrace] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
   const s = summarize(turn);
   const secs = s.answer ? (s.answer.ms / 1000).toFixed(1) : null;
   const openResult = open ? s.results.get(open) : undefined;
+  const hasEvidence = [...s.results.values()].some((r) => r.evidence?.nodes.length);
 
   return (
     <div className="flex flex-col gap-3">
@@ -89,8 +93,7 @@ export function ChatTurn({ turn, selected, onSelect }: { turn: Turn; selected: b
       </div>
 
       <div
-        onClick={onSelect}
-        className={`max-w-[94%] cursor-pointer rounded-[20px] rounded-bl-md border p-4 transition-colors ${selected ? "border-ink" : "border-line hover:border-muted"}`}
+        className={`max-w-[94%] rounded-[20px] rounded-bl-md border p-4 transition-colors ${selected && hasEvidence ? "border-ink" : "border-line"}`}
       >
         {s.error ? (
           <p className="text-small text-accent">{s.error.message}</p>
@@ -119,8 +122,14 @@ export function ChatTurn({ turn, selected, onSelect }: { turn: Turn; selected: b
               {secs && ` · ${secs}s`} <ChevronDown size={12} className={trace ? "rotate-180" : ""} />
             </button>
             {s.corrected && <span>self-corrected once</span>}
+            {hasEvidence && (
+              <button onClick={onEvidence} className={`inline-flex items-center gap-1.5 ${selected ? "font-medium text-ink" : "hover:text-ink"}`} aria-pressed={selected}>
+                <span className={`h-1.5 w-1.5 rounded-full ${selected ? "bg-accent" : "bg-muted"}`} />
+                {selected ? "Evidence pinned" : "Show evidence"}
+              </button>
+            )}
             {s.approvalId && (
-              <Link to="/approvals" className="inline-flex items-center gap-1 font-medium text-ink hover:opacity-80">
+              <Link to={to(`/approvals/${s.approvalId}`)} className="inline-flex items-center gap-1 font-medium text-ink hover:opacity-80">
                 Review proposal <ArrowRight size={12} />
               </Link>
             )}
@@ -155,16 +164,21 @@ export function ChatTurn({ turn, selected, onSelect }: { turn: Turn; selected: b
 }
 
 /** The evidence for one answer: the merged path graph. On wide screens it is a sticky side panel. */
-export function EvidencePanel({ turn }: { turn: Turn | undefined }) {
+export function EvidencePanel({ turn, index, total, bare }: { turn: Turn | undefined; index?: number; total?: number; bare?: boolean }) {
   const s = turn ? summarize(turn) : undefined;
   const evidence = useMemo(() => (s ? mergeEvidence([...s.results.values()]) : { nodes: [], edges: [] }), [turn?.events.length]);
   return (
-    <div className="rounded-window border border-line bg-bg">
-      <div className="border-b border-line px-4 py-3">
-        <p className="text-small font-medium">Evidence</p>
-        <p className="truncate text-[12px] text-muted">{turn ? turn.question : "Ask something; the path behind the answer shows up here."}</p>
-      </div>
-      <div className="p-3">
+    <div className={bare ? "" : "rounded-window border border-line bg-bg"}>
+      {!bare && (
+        <div className="border-b border-line px-4 py-3">
+          <p className="flex items-center gap-1.5 text-[12px] text-muted">
+            <span className={`h-1.5 w-1.5 rounded-full ${turn ? "bg-accent" : "bg-line"}`} />
+            {turn && index !== undefined && total ? `Evidence for answer ${index + 1} of ${total}` : "Evidence"}
+          </p>
+          <p className="mt-0.5 line-clamp-2 text-small font-medium">{turn ? turn.question : "Ask something; the path behind the answer shows up here."}</p>
+        </div>
+      )}
+      <div className={bare ? "" : "p-3"}>
         {evidence.nodes.length ? (
           <PathGraph evidence={evidence} />
         ) : (

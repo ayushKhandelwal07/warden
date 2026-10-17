@@ -28,7 +28,7 @@ Defined once as CSS variables in `src/styles/tokens.css` and mapped into the Tai
 | `--bg` | `#ffffff` | Page |
 | `--ink` | `#111111` | Text, primary buttons, status bar, headline |
 | `--muted` | `#757575` | Secondary text, captions, axis labels |
-| `--line` | `#e8e8e8` | 1px hairline borders, dividers, inactive graph edges |
+| `--line` | `#d6d6d6` | 1px hairline borders, dividers, inactive graph edges |
 | `--code` | `#f5f5f5` | Background of Cypher/code blocks only |
 | `--tint` | `#faf6f2` | Faint warm wash behind the evidence stage only |
 | `--accent` | `#ff4a00` | Logo glyph, evidence-path edges, "exploited in the wild" marker, focus ring. Never a large fill. |
@@ -86,6 +86,14 @@ Subcopy under a display headline: 18px muted, with the key sentence in ink, weig
    - Airy top, dense bottom.
 5. **Tables:** hairline row dividers, 44px rows, no zebra stripes, mono for IDs and versions, right-aligned numbers.
 6. **Empty / error states:** one muted sentence + one action. Never a blank panel.
+
+## v3 shell (Oct 17): replaces the status bar and header above
+
+- **Public pages** (`/`, `/login`, `/signup`): the dark announcement bar (36px, ink, white 12.5px) and a slim header with one solid "Get started" pill. The landing page shows the live demo graph inside window chrome.
+- **App** (`/app/:project/...`): a claude.ai-style left sidebar, 272px with a 1px `--line` right border. From top to bottom it holds the logo and collapse button, the project switcher, a "New chat" secondary pill, the section links (Home, Ask, PR impact, Approvals with count, Tools, Sync), the recent list (chats, or PR analyses on PR impact) grouped Today / Previous 7 days / Older, then the graph status dot and the user menu. Below 1024px it's a drawer behind a 56px top bar.
+- **Borders** are `--line` #d6d6d6 (strengthened from #e8e8e8 on Oct 17 so cards read on light screens).
+- **List + detail** pages (Approvals) put a 340px list on the left and the detail on the right; on phones they become two pages with a back link.
+- **Side panels** (evidence, tool runs) are right drawers on desktop and bottom sheets on phones.
 
 ## Path graph (cytoscape)
 

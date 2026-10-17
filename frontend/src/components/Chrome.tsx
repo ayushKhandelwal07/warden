@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, NavLink } from "react-router-dom";
-import { ArrowUpRight, GitPullRequest, House, Inbox, MessageSquare, RefreshCw, Wrench } from "lucide-react";
+import { ArrowUpRight } from "lucide-react";
 import { api, APPROVALS_CHANGED, ApiError, type Health } from "../lib/api";
 
 export function Logo() {
@@ -20,7 +19,7 @@ function shortDate(ms: number) {
 }
 
 /** One dot instead of a banner: green = graph connected, orange = down. Click for the details. */
-export function StatusDot({ health, error }: { health: Health | null; error: Error | null }) {
+export function StatusDot({ health, error, up }: { health: Health | null; error: Error | null; up?: boolean }) {
   const [open, setOpen] = useState(false);
   const box = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -40,7 +39,7 @@ export function StatusDot({ health, error }: { health: Health | null; error: Err
         {label}
       </button>
       {open && (
-        <div className="rise-in absolute right-0 top-11 z-40 w-[290px] rounded-card border border-line bg-bg p-4 text-small shadow-window">
+        <div className={`rise-in absolute z-40 w-[290px] ${up ? "bottom-11 left-0" : "right-0 top-11"} rounded-card border border-line bg-bg p-4 text-small shadow-window`}>
           {down ? (
             <p>{dbDown ? `FalkorDB unreachable: ${health?.error ?? error?.message}` : "The Warden API isn't answering. Start it and reload."}</p>
           ) : health ? (
@@ -72,14 +71,6 @@ export function StatusDot({ health, error }: { health: Health | null; error: Err
   );
 }
 
-const NAV = [
-  { to: "/", label: "Home", icon: House },
-  { to: "/ask", label: "Ask", icon: MessageSquare },
-  { to: "/impact", label: "PRs", icon: GitPullRequest },
-  { to: "/approvals", label: "Approvals", icon: Inbox },
-  { to: "/tools", label: "Tools", icon: Wrench },
-];
-
 /** Pending approvals count for the nav badge; refreshes on change events and every 15 s. */
 export function usePendingCount() {
   const [n, setN] = useState(0);
@@ -94,52 +85,4 @@ export function usePendingCount() {
     };
   }, []);
   return n;
-}
-
-function Badge({ n }: { n: number }) {
-  return n > 0 ? (
-    <span className="ml-1.5 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-ink px-1 text-[10.5px] font-medium text-white tabular-nums">{n}</span>
-  ) : null;
-}
-
-export function Header({ health, error }: { health: Health | null; error: Error | null }) {
-  const pending = usePendingCount();
-  return (
-    <>
-      <header className="sticky top-0 z-30 border-b border-line bg-bg/90 backdrop-blur">
-        <div className="mx-auto flex h-14 max-w-[1200px] items-center gap-6 px-4 sm:px-6">
-          <Link to="/" aria-label="Warden home">
-            <Logo />
-          </Link>
-          <nav className="ml-4 hidden items-center gap-6 text-[14.5px] sm:flex">
-            {NAV.map((n) => (
-              <NavLink key={n.to} to={n.to} end className={({ isActive }) => (isActive ? "font-medium text-ink" : "text-muted transition-colors hover:text-ink")}>
-                {n.label}
-                {n.to === "/approvals" && <Badge n={pending} />}
-              </NavLink>
-            ))}
-          </nav>
-          <div className="ml-auto flex items-center gap-2">
-            <StatusDot health={health} error={error} />
-            <Link to="/sync" className="inline-flex h-9 items-center gap-1.5 rounded-full border border-line px-3 text-[12.5px] font-medium hover:opacity-85">
-              <RefreshCw size={14} /> <span className="hidden sm:inline">Sync</span>
-            </Link>
-          </div>
-        </div>
-      </header>
-
-      {/* Phones: thumb-reach tab bar */}
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-5 border-t border-line bg-bg/95 pb-[env(safe-area-inset-bottom)] backdrop-blur sm:hidden" aria-label="Main">
-        {NAV.map((n) => (
-          <NavLink key={n.to} to={n.to} end className={({ isActive }) => `flex h-14 flex-col items-center justify-center gap-0.5 text-[10.5px] ${isActive ? "font-medium text-ink" : "text-muted"}`}>
-            <span className="relative">
-              <n.icon size={19} strokeWidth={1.8} />
-              {n.to === "/approvals" && pending > 0 && <span className="absolute -right-2 -top-1.5 h-4 min-w-4 rounded-full bg-accent px-1 text-center text-[10px] leading-4 text-white">{pending}</span>}
-            </span>
-            {n.label}
-          </NavLink>
-        ))}
-      </nav>
-    </>
-  );
 }

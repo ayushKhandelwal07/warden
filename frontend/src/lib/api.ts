@@ -100,7 +100,11 @@ export type ToolResult = {
   sources: string[];
   ms: number;
   error: string | null;
+  /** Served from the graph-versioned cache (same answer, the graph hasn't changed since). */
+  cached?: boolean;
 };
+
+export type ToolRunSummary = { id: string; tool: string; args: Record<string, unknown>; summary: string | null; created_at: string };
 
 export type McpStatus = {
   server: { name: string; version: string };
@@ -152,6 +156,7 @@ export type Approval = {
   requested_by: string;
   last_error?: string | null;
   decided_at?: number;
+  decided_by?: string;
   reason?: string | null;
   payload: Plan & {
     patches?: { service: string; files: PatchFile[] }[]; pr?: number; comment?: string; risk?: string;
@@ -216,6 +221,16 @@ export type SyncStatus = { current: { ref: string; sha: string; at: number }; re
 
 export type WhatIf = GraphDiff & { service: string; graph: string; deleted: boolean; error?: string };
 
+export type User = { id: string; email: string; name: string };
+export type Org = { id: string; name: string; personal: boolean; role: "owner" | "admin" | "member" };
+export type Project = { id: string; slug: string; name: string; org_id: string; org_name: string; graph: string; repo_url: string | null; ref: string | null; status: string; status_detail: string | null };
+export type Me = { user: User; orgs: Org[]; projects: Project[] };
+export type Member = { user_id: string; name: string; email: string; role: Org["role"]; joined_at: string };
+export type Conversation = { id: string; kind: "ask" | "impact"; title: string; shared: boolean; mine: boolean; owner: string | null; created_at: string; updated_at: string };
+export type ConversationMessage = { id: string; role: "user" | "assistant"; content: string; data: Record<string, unknown> | null; created_at: string };
+export type ConversationDetail = Conversation & { messages: ConversationMessage[] };
+export type InviteInfo = { org_id: string; org_name: string; role: string; invited_by: string | null };
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -225,28 +240,65 @@ export class ApiError extends Error {
 /** Where the API lives. Empty in dev (Vite proxies /api); set VITE_API_URL when the UI is hosted separately (Vercel). */
 export const API_BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
 
-async function getJson<T>(path: string): Promise<T> {
-  const res = await fetch(API_BASE + path);
-  const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ApiError(res.status, body.error ?? `${res.status} ${res.statusText}`);
-  return body as T;
+let project: string | null = null;
+/** The project slug every request is scoped to (set by the app shell from the URL). */
+export function setApiProject(slug: string | null) {
+  project = slug;
+}
+export function apiHeaders(json = false): Record<string, string> {
+  return { ...(json ? { "Content-Type": "application/json" } : {}), ...(project ? { "X-Project": project } : {}) };
 }
 
-async function postJson<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(API_BASE + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+/** Fired on any 401, so the app drops to the login screen. */
+export const UNAUTHORIZED = "warden:unauthorized";
+
+async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const res = await fetch(API_BASE + path, {
+    method,
+    credentials: "include",
+    headers: apiHeaders(body !== undefined),
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
   const data = await res.json().catch(() => ({}));
+  if (res.status === 401 && !path.startsWith("/api/auth/")) window.dispatchEvent(new Event(UNAUTHORIZED));
   if (!res.ok) throw new ApiError(res.status, data.error ?? `${res.status} ${res.statusText}`);
   return data as T;
 }
 
+const getJson = <T,>(path: string) => request<T>("GET", path);
+const postJson = <T,>(path: string, body: unknown) => request<T>("POST", path, body);
+const patchJson = <T,>(path: string, body: unknown) => request<T>("PATCH", path, body);
+const del = <T,>(path: string) => request<T>("DELETE", path);
+
 export const api = {
+  me: () => getJson<Me | { user: null; orgs: []; projects: [] }>("/api/auth/me"),
+  updateMe: (name: string) => patchJson<Me>("/api/auth/me", { name }),
+  login: (email: string, password: string, invite?: string) => postJson<Me>("/api/auth/login", { email, password, invite }),
+  signup: (name: string, email: string, password: string, invite?: string) => postJson<Me>("/api/auth/signup", { name, email, password, invite }),
+  logout: () => postJson<{ ok: boolean }>("/api/auth/logout", {}),
+  members: (org: string) => getJson<Member[]>(`/api/orgs/${org}/members`),
+  createOrg: (name: string) => postJson<Me>("/api/orgs", { name }),
+  createInvite: (org: string, role = "member") => postJson<{ token: string; role: string; expires_at: string }>(`/api/orgs/${org}/invites`, { role }),
+  setRole: (org: string, member: string, role: string) => patchJson<Member[]>(`/api/orgs/${org}/members/${member}`, { role }),
+  removeMember: (org: string, member: string) => del<{ ok: boolean }>(`/api/orgs/${org}/members/${member}`),
+  createProject: (orgId: string, name: string) => postJson<Me & { project: Project }>("/api/projects", { org_id: orgId, name }),
+  deleteProject: (id: string) => del<Me>(`/api/projects/${id}`),
+  invite: (token: string) => getJson<InviteInfo>(`/api/invites/${token}`),
+  conversations: (kind: "ask" | "impact" = "ask") => getJson<Conversation[]>(`/api/conversations?kind=${kind}`),
+  conversation: (id: string) => getJson<ConversationDetail>(`/api/conversations/${id}`),
+  updateConversation: (id: string, patch: { title?: string; shared?: boolean }) => patchJson<Conversation>(`/api/conversations/${id}`, patch),
+  deleteConversation: (id: string) => del<{ ok: boolean }>(`/api/conversations/${id}`),
+  acceptInvite: (token: string) => postJson<Me & InviteInfo>(`/api/invites/${token}/accept`, {}),
   health: () => getJson<Health>("/api/health"),
   overview: () => getJson<Overview>("/api/overview"),
   tools: () => getJson<ToolMeta[]>("/api/tools"),
   mcp: () => getJson<McpStatus>("/api/mcp"),
-  runTool: (name: string, args: Record<string, unknown>) => postJson<ToolResult>(`/api/tools/${name}`, args),
+  runTool: (name: string, args: Record<string, unknown>, save = true) => postJson<ToolResult & { run_id?: string }>(`/api/tools/${name}${save ? "" : "?save=false"}`, args),
+  toolRuns: () => getJson<ToolRunSummary[]>("/api/tool-runs"),
+  toolRun: (id: string) => getJson<{ id: string; tool: string; args: Record<string, unknown>; created_at: string; result: ToolResult }>(`/api/tool-runs/${id}`),
   createPlan: (maxFixes = 5) => postJson<{ approval: Approval | null; plan: Plan }>("/api/plans", { max_fixes: maxFixes }),
   approvals: () => getJson<Approval[]>("/api/approvals"),
+  approval: (id: string) => getJson<Approval>(`/api/approvals/${id}`),
   approve: (id: string) => postJson<Approval>(`/api/approvals/${id}/approve`, {}),
   reject: (id: string, reason: string) => postJson<Approval>(`/api/approvals/${id}/reject`, { reason }),
   github: () => getJson<GithubStatus>("/api/github"),
@@ -258,8 +310,14 @@ export const api = {
   sync: (ref: string) => postJson<SyncRecord>("/api/sync", { ref }),
   whatIf: (service: string) => postJson<WhatIf>("/api/whatif", { service }),
   reset: () => postJson<{ reset: boolean; ref: string }>("/api/reset", {}),
-  impact: (pr: number, source: "history" | "fork") => postJson<{ report: ImpactReport | null; approval: Approval | null; error?: string }>("/api/impact", { pr, source }),
+  impact: (pr: number, source: "history" | "fork") => postJson<{ report: ImpactReport | null; approval: Approval | null; error?: string; run_id?: string }>("/api/impact", { pr, source }),
 };
+
+/** Fired after a chat or PR analysis is created, renamed, shared or deleted, so the sidebar list refreshes. */
+export const CONVERSATIONS_CHANGED = "warden:conversations-changed";
+export function notifyConversationsChanged() {
+  window.dispatchEvent(new Event(CONVERSATIONS_CHANGED));
+}
 
 /** Fired after anything that changes the approvals list, so the nav badge refreshes. */
 export const APPROVALS_CHANGED = "warden:approvals-changed";

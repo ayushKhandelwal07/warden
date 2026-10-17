@@ -38,7 +38,7 @@ export function PlanView({ plan }: { plan: Plan }) {
           </thead>
           <tbody>
             {plan.items.map((it, i) => (
-              <tr key={it.package} className="border-b border-line last:border-0">
+              <tr key={`${it.ecosystem}:${it.package}@${it.from}`} className="border-b border-line last:border-0">
                 <td className="h-12 px-3 tabular-nums text-muted">{i + 1}</td>
                 <td className="h-12 px-3">
                   <span className="whitespace-nowrap font-mono text-[12.5px]">

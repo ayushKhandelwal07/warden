@@ -25,7 +25,7 @@ export function ToolResultView({ result, title }: { result: ToolResult; title?: 
         <>
           <span className="font-mono">{result.tool}</span>
           <span className="ml-2 text-muted">
-            {result.queries.length} quer{result.queries.length === 1 ? "y" : "ies"} · {totalQueryMs.toFixed(1)} ms in FalkorDB
+            {result.queries.length} quer{result.queries.length === 1 ? "y" : "ies"} · {totalQueryMs.toFixed(1)} ms in FalkorDB{result.cached ? " · served from cache" : ""}
           </span>
         </>
       }

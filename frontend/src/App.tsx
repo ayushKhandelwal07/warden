@@ -1,31 +1,42 @@
-import { BrowserRouter, Route, Routes } from "react-router-dom";
-import { Header } from "./components/Chrome";
-import { api } from "./lib/api";
-import { useApi } from "./lib/useApi";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { AppShell, ToProject } from "./components/AppShell";
+import { AuthProvider } from "./lib/auth";
 import { Ask } from "./screens/Ask";
+import { AuthScreen, InviteScreen } from "./screens/AuthScreen";
 import { Home } from "./screens/Home";
+import { Landing } from "./screens/Landing";
 import { Approvals } from "./screens/Approvals";
 import { PrImpact } from "./screens/PrImpact";
+import { Settings } from "./screens/Settings";
 import { Sync } from "./screens/Sync";
 import { Tools } from "./screens/Tools";
 
 export default function App() {
-  const health = useApi(api.health);
   return (
-    <BrowserRouter>
-      <div className="min-h-screen bg-bg">
-        <Header health={health.data} error={health.error} />
-        <main className="pb-14 sm:pb-0">
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/ask" element={<Ask />} />
-            <Route path="/impact" element={<PrImpact />} />
-            <Route path="/approvals" element={<Approvals />} />
-            <Route path="/tools" element={<Tools />} />
-            <Route path="/sync" element={<Sync />} />
-          </Routes>
-        </main>
-      </div>
-    </BrowserRouter>
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<Landing />} />
+          <Route path="/login" element={<AuthScreen mode="login" />} />
+          <Route path="/signup" element={<AuthScreen mode="signup" />} />
+          <Route path="/invite/:token" element={<InviteScreen />} />
+          <Route path="/app/:project" element={<AppShell />}>
+            <Route index element={<Navigate to="home" replace />} />
+            <Route path="home" element={<Home />} />
+            <Route path="ask/:chatId?" element={<Ask />} />
+            <Route path="impact/:runId?" element={<PrImpact />} />
+            <Route path="approvals/:id?" element={<Approvals />} />
+            <Route path="tools" element={<Tools />} />
+            <Route path="sync" element={<Sync />} />
+            <Route path="settings/:section?" element={<Settings />} />
+            <Route path="*" element={<Navigate to="home" replace />} />
+          </Route>
+          {["/home", "/ask", "/impact", "/approvals", "/tools", "/sync"].map((p) => (
+            <Route key={p} path={p} element={<ToProject path={p} />} />
+          ))}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   );
 }

@@ -1,7 +1,8 @@
-import { useMemo, useState, type ReactNode } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { ArrowRight, ArrowUpRight, ScanSearch } from "lucide-react";
-import { api, notifyApprovalsChanged, type Approval, type Evidence, type ImpactReport } from "../lib/api";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { useProject } from "../lib/auth";
+import { ArrowRight, ArrowUpRight, Plus, ScanSearch } from "lucide-react";
+import { api, notifyApprovalsChanged, notifyConversationsChanged, type Approval, type Evidence, type ImpactReport } from "../lib/api";
 import { useApi } from "../lib/useApi";
 import { PathGraph } from "../components/PathGraph";
 import { Button, CodeBlock, Window } from "../components/ui";
@@ -30,16 +31,12 @@ function mergeEvidence(report: ImpactReport, depth: number): Evidence {
   return { nodes: [...nodes.values()], edges: [...edges.values()] };
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <div className="flex flex-col gap-3">
-      <h3 className="text-small font-medium text-muted">{title}</h3>
-      {children}
-    </div>
-  );
-}
+const TABS = ["Blast radius", "Incidents", "Reviewers", "Policies", "Comment"] as const;
+type Tab = (typeof TABS)[number];
 
 function Report({ report, approval }: { report: ImpactReport; approval: Approval | null }) {
+  const { to } = useProject();
+  const [tab, setTab] = useState<Tab>("Blast radius");
   const [depth, setDepth] = useState(3);
   const evidence = useMemo(() => mergeEvidence(report, depth), [report, depth]);
   const [showCalls, setShowCalls] = useState(false);
@@ -74,8 +71,36 @@ function Report({ report, approval }: { report: ImpactReport; approval: Approval
         </div>
       </div>
 
-      {report.services.length > 0 && (
-        <div className="border-b border-line px-4 pt-4">
+      <div className="flex flex-wrap items-center gap-x-6 gap-y-1 border-b border-line px-6 py-3 text-small">
+        <span className="text-muted">Changed</span>
+        {report.services.map((s) => (
+          <span key={s.service} title={s.files.join(", ")}>
+            <span className="font-medium">{s.service}</span>
+            {s.owner && <span className="text-muted"> · {s.owner}</span>}
+          </span>
+        ))}
+      </div>
+
+      <div className="flex gap-1 overflow-x-auto border-b border-line px-4" role="tablist">
+        {TABS.filter((t) => t !== "Comment" || report.comment).map((t) => {
+          const n = t === "Incidents" ? report.incidents?.length : t === "Reviewers" ? report.reviewers?.length : t === "Policies" ? report.policies?.length : undefined;
+          return (
+            <button
+              key={t}
+              role="tab"
+              aria-selected={tab === t}
+              onClick={() => setTab(t)}
+              className={`-mb-px shrink-0 border-b-2 px-3 py-3 text-small transition-colors ${tab === t ? "border-ink font-medium text-ink" : "border-transparent text-muted hover:text-ink"}`}
+            >
+              {t}
+              {n !== undefined && <span className="ml-1.5 tabular-nums text-muted">{n}</span>}
+            </button>
+          );
+        })}
+      </div>
+
+      {tab === "Blast radius" && report.services.length > 0 && (
+        <div className="px-4 pt-4">
           <div className="flex items-center gap-3 px-2">
             <span className="text-small text-muted">Blast radius</span>
             {[1, 3].map((d) => (
@@ -105,20 +130,10 @@ function Report({ report, approval }: { report: ImpactReport; approval: Approval
         </div>
       )}
 
-      <div className="grid gap-8 p-6 lg:grid-cols-2">
-        <Section title="Changed services">
-          {report.services.map((s) => (
-            <div key={s.service} className="text-small">
-              <span className="font-medium">{s.service}</span>
-              {s.owner && <span className="text-muted"> · {s.owner}</span>}
-              <span className="block truncate font-mono text-[12px] text-muted">{s.files.slice(0, 3).join(", ")}{s.files.length > 3 ? " …" : ""}</span>
-            </div>
-          ))}
-        </Section>
-
-        <Section title="Past incidents (synthetic history)">
+      {tab === "Incidents" && (
+        <div className="flex flex-col gap-4 p-6">
           {report.incidents?.length ? (
-            report.incidents.slice(0, 3).map((i) => (
+            report.incidents.map((i) => (
               <div key={i.incident} className="text-small">
                 <span className="font-mono">{i.incident}</span> <span className="text-muted">{i.severity} · {i.date}</span>
                 {i.same_kind_of_change && <span className="ml-2 font-medium text-accent">same kind of change</span>}
@@ -129,9 +144,12 @@ function Report({ report, approval }: { report: ImpactReport; approval: Approval
           ) : (
             <p className="text-small text-muted">No recorded incident on these services.</p>
           )}
-        </Section>
+          <p className="text-[12px] text-muted">Incidents are synthetic postmortems for the demo org, tied to services and change kinds.</p>
+        </div>
+      )}
 
-        <Section title="Suggested reviewers (from real commit history)">
+      {tab === "Reviewers" && (
+        <div className="flex flex-col gap-4 p-6">
           {report.reviewers?.length ? (
             report.reviewers.map((r) => (
               <div key={r.person} className="text-small">
@@ -146,9 +164,12 @@ function Report({ report, approval }: { report: ImpactReport; approval: Approval
           ) : (
             <p className="text-small text-muted">Nobody in the ingested history touched these services.</p>
           )}
-        </Section>
+          <p className="text-[12px] text-muted">From the real commit history of the repository.</p>
+        </div>
+      )}
 
-        <Section title="Policies">
+      {tab === "Policies" && (
+        <div className="flex flex-col gap-4 p-6">
           {report.policies?.length ? (
             report.policies.map((p) => (
               <div key={p.policy} className="text-small">
@@ -159,16 +180,16 @@ function Report({ report, approval }: { report: ImpactReport; approval: Approval
           ) : (
             <p className="text-small text-muted">No policy applies.</p>
           )}
-        </Section>
-      </div>
+        </div>
+      )}
 
-      {report.comment && (
-        <div className="flex flex-col gap-4 border-t border-line p-6">
+      {tab === "Comment" && report.comment && (
+        <div className="flex flex-col gap-4 p-6">
           <CodeBlock label="GitHub comment · plain names, no @-mentions" code={report.comment} />
           {approval ? (
             <div className="flex flex-wrap items-center gap-4">
               <span className="text-small text-muted">Filed for approval: posting comments, labels and reviewers needs your OK.</span>
-              <Link to="/approvals" className="inline-flex h-11 items-center gap-2 rounded-full border border-line px-5 text-small font-medium hover:opacity-85">
+              <Link to={to(approval ? `/approvals/${approval.id}` : "/approvals")} className="inline-flex h-11 items-center gap-2 rounded-full border border-line px-5 text-small font-medium hover:opacity-85">
                 Review in Approvals <ArrowRight size={16} />
               </Link>
             </div>
@@ -202,84 +223,141 @@ function Report({ report, approval }: { report: ImpactReport; approval: Approval
   );
 }
 
+type Run = { report: ImpactReport; approval: Approval | null };
+
 export function PrImpact() {
+  const { runId } = useParams();
+  const { to } = useProject();
+  const nav = useNavigate();
   const gh = useApi(api.github);
-  const [params, setParams] = useSearchParams();
+  const [params] = useSearchParams();
   const [pr, setPr] = useState(params.get("pr") ?? "1789");
   const [source, setSource] = useState<"history" | "fork">((params.get("source") as "fork") ?? "history");
-  const [state, setState] = useState<{ busy: boolean; report?: ImpactReport; approval?: Approval | null; error?: string }>({ busy: false });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [run, setRun] = useState<Run | null>(null);
+  const [loading, setLoading] = useState(false);
 
-  const run = (n: string, src = source) => {
+  // A saved run opens from its URL (sidebar, a shared link, or right after analysing).
+  useEffect(() => {
+    setError(null);
+    if (!runId) return setRun(null);
+    let live = true;
+    setLoading(true);
+    api
+      .conversation(runId)
+      .then((c) => {
+        const data = c.messages.find((m) => m.role === "assistant")?.data as Run | undefined;
+        if (!live) return;
+        if (data?.report) setRun({ report: data.report, approval: data.approval ?? null });
+        else setError("This analysis has no saved report.");
+      })
+      .catch((e: Error) => live && setError(e.message))
+      .finally(() => live && setLoading(false));
+    return () => {
+      live = false;
+    };
+  }, [runId]);
+
+  const analyze = (n: string, src = source) => {
     setPr(n);
-    setParams({ pr: n, source: src });
-    setState({ busy: true });
+    setBusy(true);
+    setError(null);
     api
       .impact(Number(n), src)
       .then((r) => {
-        if (!r.report) return setState({ busy: false, error: r.error ?? "No report." });
-        setState({ busy: false, report: r.report, approval: r.approval });
+        setBusy(false);
+        if (!r.report) return setError(r.error ?? "No report.");
         if (r.approval) notifyApprovalsChanged();
+        notifyConversationsChanged();
+        setRun({ report: r.report, approval: r.approval });
+        if (r.run_id) nav(to(`/impact/${r.run_id}`));
       })
-      .catch((e: Error) => setState({ busy: false, error: e.message }));
+      .catch((e: Error) => {
+        setBusy(false);
+        setError(e.message);
+      });
   };
 
+  const form = (
+    <form
+      className="flex flex-col gap-4 rounded-card border border-line p-5"
+      onSubmit={(e) => {
+        e.preventDefault();
+        analyze(pr);
+      }}
+    >
+      <div className="flex flex-wrap items-center gap-3">
+        <input
+          value={pr}
+          onChange={(e) => setPr(e.target.value.replace(/[^0-9]/g, ""))}
+          placeholder="PR number"
+          aria-label="PR number"
+          className="h-11 w-36 rounded-full border border-line px-4 font-mono text-small outline-none focus:border-ink"
+        />
+        <div className="flex gap-1.5">
+          {(["history", "fork"] as const).map((s) => (
+            <button
+              type="button"
+              key={s}
+              disabled={s === "fork" && !gh.data?.configured}
+              onClick={() => setSource(s)}
+              title={s === "fork" && !gh.data?.configured ? gh.data?.reason : undefined}
+              className={`h-8 rounded-full px-3 text-[12px] font-medium disabled:opacity-40 ${source === s ? "bg-ink text-white" : "border border-line text-muted hover:text-ink"}`}
+            >
+              {s === "history" ? "merged history" : "open PR on your fork"}
+            </button>
+          ))}
+        </div>
+        <div className="ml-auto">
+          <Button variant="primary" icon={<ScanSearch size={16} />} disabled={busy || !pr}>
+            {busy ? "Following the graph…" : "Analyze"}
+          </Button>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-2 text-small text-muted">
+        Try:
+        {SUGGESTIONS.map((s) => (
+          <button type="button" key={s.pr} disabled={busy} onClick={() => analyze(String(s.pr), "history")} className="rounded-full border border-line px-3 py-1 hover:text-ink disabled:opacity-40">
+            #{s.pr} {s.label}
+          </button>
+        ))}
+      </div>
+    </form>
+  );
+
+  if (runId)
+    return (
+      <div className="mx-auto max-w-[1100px] px-4 pb-24 pt-6 sm:px-6">
+        <div className="mb-5 flex items-center gap-3">
+          <Link to={to("/impact")} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-line px-3.5 text-[12.5px] font-medium hover:opacity-85">
+            <Plus size={14} /> New analysis
+          </Link>
+          {busy && <span className="text-small text-muted">Following the graph…</span>}
+        </div>
+        {loading ? (
+          <p className="py-24 text-center text-muted">Opening the analysis…</p>
+        ) : error ? (
+          <p className="rounded-card border border-line p-6 text-center">{error}</p>
+        ) : run ? (
+          <Report key={runId} report={run.report} approval={run.approval} />
+        ) : null}
+      </div>
+    );
+
   return (
-    <div className="mx-auto max-w-[1200px] px-6 pb-24">
-      <section className="mx-auto max-w-[680px] pb-10 pt-16 text-center">
+    <div className="mx-auto max-w-[1100px] px-4 pb-24 sm:px-6">
+      <section className="mx-auto max-w-[680px] pb-8 pt-14 text-center">
         <h1 className="text-h1 font-semibold">What will this change break?</h1>
         <p className="mt-4 text-[17px] text-muted">
           Warden follows a pull request through the graph: the services it touches, everything that depends on them, what went wrong before, and who
           knows the code. <span className="font-semibold text-ink">Every line comes from a path.</span>
         </p>
       </section>
-
-      <form
-        className="mx-auto flex max-w-[760px] flex-col gap-4 rounded-card border border-line p-6"
-        onSubmit={(e) => {
-          e.preventDefault();
-          run(pr);
-        }}
-      >
-        <div className="flex flex-wrap items-center gap-3">
-          <input
-            value={pr}
-            onChange={(e) => setPr(e.target.value.replace(/[^0-9]/g, ""))}
-            placeholder="PR number"
-            className="h-11 w-40 rounded-full border border-line px-4 font-mono text-small outline-none focus:border-ink"
-          />
-          <div className="flex gap-1.5">
-            {(["history", "fork"] as const).map((s) => (
-              <button
-                type="button"
-                key={s}
-                disabled={s === "fork" && !gh.data?.configured}
-                onClick={() => setSource(s)}
-                title={s === "fork" && !gh.data?.configured ? gh.data?.reason : undefined}
-                className={`h-8 rounded-full px-3 text-[12px] font-medium disabled:opacity-40 ${source === s ? "bg-ink text-white" : "border border-line text-muted hover:text-ink"}`}
-              >
-                {s === "history" ? "merged history" : "open PR on your fork"}
-              </button>
-            ))}
-          </div>
-          <div className="ml-auto">
-            <Button variant="primary" icon={<ScanSearch size={16} />} disabled={state.busy || !pr}>
-              {state.busy ? "Following the graph…" : "Analyze"}
-            </Button>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-2 text-small text-muted">
-          Try:
-          {SUGGESTIONS.map((s) => (
-            <button type="button" key={s.pr} onClick={() => run(String(s.pr), "history")} className="rounded-full border border-line px-3 py-1 hover:text-ink">
-              #{s.pr} {s.label}
-            </button>
-          ))}
-        </div>
-      </form>
-
-      <div className="mt-12">
-        {state.error && <p className="rounded-card border border-line p-6 text-center">{state.error}</p>}
-        {state.report && <Report key={`${state.report.pr}-${state.report.source}`} report={state.report} approval={state.approval ?? null} />}
+      <div className="mx-auto max-w-[760px]">
+        {form}
+        {error && <p className="mt-6 rounded-card border border-line p-6 text-center">{error}</p>}
+        <p className="mt-6 text-center text-small text-muted">Every analysis is saved in the sidebar, so you can reopen, rename or share it.</p>
       </div>
     </div>
   );

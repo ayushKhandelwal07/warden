@@ -1,6 +1,7 @@
-import { API_BASE, type ToolResult } from "./api";
+import { API_BASE, apiHeaders, type ToolResult } from "./api";
 
 export type AgentEvent =
+  | { type: "conversation"; id: string; title: string }
   | { type: "start"; model: string; via: "mcp" | "direct"; tools: number }
   | { type: "tool_call"; id: string; tool: string; args: Record<string, unknown>; via: string }
   | { type: "tool_result"; id: string; result: ToolResult & { approval_id?: string } }
@@ -8,9 +9,9 @@ export type AgentEvent =
   | { type: "answer"; text: string; verdict: { ok: boolean; unsupported: string[]; checked: string[]; no_tools: boolean }; steps: number; ms: number }
   | { type: "error"; message: string };
 
-/** Streams one agent turn from /api/ask (server-sent events over a POST). */
-export async function streamAsk(question: string, history: { role: string; content: string }[], onEvent: (e: AgentEvent) => void) {
-  const res = await fetch(API_BASE + "/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question, history }) });
+/** Streams one agent turn from /api/ask (server-sent events over a POST). The server keeps the chat and its history. */
+export async function streamAsk(question: string, conversationId: string | null, onEvent: (e: AgentEvent) => void) {
+  const res = await fetch(API_BASE + "/api/ask", { method: "POST", credentials: "include", headers: apiHeaders(true), body: JSON.stringify({ question, conversation_id: conversationId }) });
   if (!res.ok || !res.body) {
     onEvent({ type: "error", message: `${res.status} ${res.statusText}` });
     return;

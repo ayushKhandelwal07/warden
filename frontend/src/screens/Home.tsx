@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useProject } from "../lib/auth";
 import { ArrowRight, ArrowUp, RotateCw, Wrench } from "lucide-react";
 import { api, notifyApprovalsChanged, type Approval, type Overview } from "../lib/api";
 import { useApi } from "../lib/useApi";
@@ -15,7 +16,8 @@ function Tile({ label, value, sub, to, accent }: { label: string; value: string 
       <span className="text-[12px] text-muted">{sub}</span>
     </div>
   );
-  return to ? <Link to={to}>{inner}</Link> : inner;
+  const p = useProject();
+  return to ? <Link to={p.to(to)}>{inner}</Link> : inner;
 }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -27,12 +29,13 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 function Activity({ items }: { items: Approval[] }) {
+  const { to } = useProject();
   if (!items.length) return <p className="text-small text-muted">Nothing yet. Build a fix plan or ask a question.</p>;
   return (
     <ul className="divide-y divide-line">
       {items.slice(0, 4).map((a) => (
         <li key={a.id}>
-          <Link to="/approvals" className="flex items-center gap-3 py-3 text-small hover:opacity-80">
+          <Link to={to(`/approvals/${a.id}`)} className="flex items-center gap-3 py-3 text-small hover:opacity-80">
             <span className={`h-2 w-2 shrink-0 rounded-full ${a.status === "pending" ? "bg-accent" : a.status === "approved" ? "bg-ok" : "bg-line"}`} />
             <span className="min-w-0 flex-1 truncate">{a.title}</span>
             <span className="shrink-0 text-[12px] text-muted">{STATUS_LABEL[a.status] ?? a.status}</span>
@@ -47,7 +50,7 @@ function pct(x: number | null | undefined) {
   return x == null ? "n/a" : `${(Math.floor(x * 10000) / 100).toFixed(2)}%`;
 }
 
-function Hero({ hero }: { hero: NonNullable<Overview["hero"]> }) {
+export function Hero({ hero }: { hero: NonNullable<Overview["hero"]> }) {
   const f = hero.facts;
   const evidence = useMemo(() => hero.evidence, [hero]);
   return (
@@ -79,6 +82,7 @@ function Hero({ hero }: { hero: NonNullable<Overview["hero"]> }) {
 
 export function Home() {
   const nav = useNavigate();
+  const { to } = useProject();
   const ov = useApi(api.overview);
   const apr = useApi(api.approvals);
   const [q, setQ] = useState("");
@@ -103,34 +107,42 @@ export function Home() {
       .createPlan(5)
       .then(() => {
         notifyApprovalsChanged();
-        nav("/approvals");
+        nav(to("/approvals"));
       })
       .catch((e: Error) => setPlan({ busy: false, error: e.message }));
   };
 
   return (
-    <div className="mx-auto flex max-w-[1100px] flex-col gap-5 px-4 pb-24 pt-6 sm:px-6 sm:pb-12 sm:pt-10">
-      <section>
-        <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.02em] sm:text-[40px]">
-          {t.kev === 1 ? "1 vulnerability" : `${t.kev} vulnerabilities`} exploited in the wild.
-        </h1>
-        <p className="mt-2 text-muted">
-          {t.reachable_vulnerabilities} of {t.vulnerabilities} known issues are reachable from the internet.
-        </p>
+    <div className="mx-auto flex max-w-[1100px] flex-col gap-8 px-4 pb-24 pt-10 sm:px-6 sm:pt-16">
+      <section className="mx-auto flex w-full max-w-[720px] flex-col items-center gap-6 text-center">
+        <div>
+          <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.02em] sm:text-[40px]">
+            {t.kev === 1 ? "1 vulnerability" : `${t.kev} vulnerabilities`} exploited in the wild.
+          </h1>
+          <p className="mt-2 text-muted">
+            {t.reachable_vulnerabilities} of {t.vulnerabilities} known issues are reachable from the internet. Ask what to do about it.
+          </p>
+        </div>
+        <form
+          className="flex w-full items-center gap-2 rounded-full border border-line bg-bg p-2 pl-6 focus-within:border-ink"
+          onSubmit={(e) => {
+            e.preventDefault();
+            nav(to(q.trim() ? `/ask?q=${encodeURIComponent(q.trim())}` : "/ask"));
+          }}
+        >
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ask Warden: what should we fix first?" className="h-12 min-w-0 flex-1 bg-transparent text-[16px] outline-none placeholder:text-muted" aria-label="Ask Warden" />
+          <button className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-ink text-white hover:opacity-85" aria-label="Ask">
+            <ArrowUp size={19} />
+          </button>
+        </form>
+        <div className="flex flex-wrap justify-center gap-2">
+          {["What should we fix first?", "What breaks if paymentservice goes down?", "Who should review a change to checkoutservice?"].map((s) => (
+            <button key={s} onClick={() => nav(to(`/ask?q=${encodeURIComponent(s)}`))} className="rounded-full border border-line px-3.5 py-1.5 text-small text-muted hover:border-ink hover:text-ink">
+              {s}
+            </button>
+          ))}
+        </div>
       </section>
-
-      <form
-        className="flex items-center gap-2 rounded-full border border-line p-1.5 pl-5 focus-within:border-ink"
-        onSubmit={(e) => {
-          e.preventDefault();
-          nav(q.trim() ? `/ask?q=${encodeURIComponent(q.trim())}` : "/ask");
-        }}
-      >
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ask Warden: what should we fix first?" className="h-11 min-w-0 flex-1 bg-transparent text-[15px] outline-none placeholder:text-muted" aria-label="Ask Warden" />
-        <button className="inline-flex h-11 w-11 items-center justify-center rounded-full bg-ink text-white hover:opacity-85" aria-label="Ask">
-          <ArrowUp size={18} />
-        </button>
-      </form>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Tile label="Reachable" value={t.reachable_vulnerabilities} sub={`of ${t.vulnerabilities} issues`} to="/ask?q=What%20should%20we%20fix%20first%3F" />
@@ -148,18 +160,18 @@ export function Home() {
         </p>
       )}
 
-      <div className="grid gap-5 lg:grid-cols-[1.15fr_1fr]">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
         <WatcherCard
           onChange={() => {
             ov.reload();
             apr.reload();
           }}
         />
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-6">
           <section className="rounded-card border border-line p-4">
             <div className="mb-1 flex items-center justify-between">
               <h2 className="text-small font-medium">Recent activity</h2>
-              <Link to="/approvals" className="inline-flex items-center gap-1 text-[12px] text-muted hover:text-ink">
+              <Link to={to("/approvals")} className="inline-flex items-center gap-1 text-[12px] text-muted hover:text-ink">
                 All <ArrowRight size={12} />
               </Link>
             </div>

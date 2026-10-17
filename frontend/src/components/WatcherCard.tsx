@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { useProject } from "../lib/auth";
 import { Eye, FlaskConical, RotateCcw, ScanSearch } from "lucide-react";
 import { api, notifyApprovalsChanged, type WatchSnapshot } from "../lib/api";
 
@@ -13,6 +14,7 @@ function ago(ms: number | null) {
 
 /** The autonomous watcher: on/off, a manual check, a one-click real change on the fork, and what it did on its own. */
 export function WatcherCard({ onChange }: { onChange?: () => void }) {
+  const { to } = useProject();
   const [snap, setSnap] = useState<WatchSnapshot | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -85,7 +87,7 @@ export function WatcherCard({ onChange }: { onChange?: () => void }) {
               <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${KIND_DOT[e.kind] ?? "bg-line"}`} />
               <span className="min-w-0 flex-1">
                 {e.link?.startsWith("/") ? (
-                  <Link to={e.link} className="hover:underline">
+                  <Link to={to(e.link)} className="hover:underline">
                     {e.text}
                   </Link>
                 ) : e.link ? (
