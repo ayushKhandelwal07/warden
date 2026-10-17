@@ -48,11 +48,38 @@ function ApprovalCard({ a, primary, onChange }: { a: Approval; primary: boolean;
           </div>
           <h2 className="mt-3 text-h2 font-semibold">{a.title}</h2>
           <p className="mt-1 text-small text-muted">{a.summary}</p>
+          {a.payload.trigger?.why && (
+            <p className="mt-2 text-[12.5px]">
+              <span className="font-medium">Why now:</span> <span className="text-muted">{a.payload.trigger.why}</span>
+            </p>
+          )}
         </div>
       </header>
 
       <div className="flex flex-col gap-6 p-6">
-        <PlanView plan={a.payload} />
+        {a.kind === "issue" ? (
+          <pre className="whitespace-pre-wrap rounded-card bg-code p-4 font-sans text-small leading-[1.6]">{a.payload.body}</pre>
+        ) : a.kind === "pr_comment" ? (
+          <pre className="whitespace-pre-wrap rounded-card bg-code p-4 font-sans text-small leading-[1.6]">{a.payload.comment}</pre>
+        ) : (
+          <>
+            {a.payload.gate && (
+              <div className="rounded-card border border-line p-3 text-small">
+                <p className={`font-medium ${a.payload.gate.passed ? "text-ok" : "text-accent"}`}>
+                  Rehearsal gate {a.payload.gate.passed ? "passed" : "blocked this plan"}
+                </p>
+                <ul className="mt-1.5 flex flex-col gap-0.5 text-[12.5px] text-muted">
+                  {a.payload.gate.checks.map((c) => (
+                    <li key={c.check}>
+                      {c.ok ? "✓" : "✗"} {c.check} <span className="text-ink">({c.detail})</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <PlanView plan={a.payload} />
+          </>
+        )}
 
         {files.length > 0 && (
           <div>
@@ -82,7 +109,7 @@ function ApprovalCard({ a, primary, onChange }: { a: Approval; primary: boolean;
             ) : a.result.url ? (
               <div className="flex flex-wrap items-center gap-x-6 gap-y-2">
                 <a href={a.result.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium hover:opacity-80">
-                  Impact report posted on PR #{a.payload.pr} <ArrowUpRight size={14} />
+                  {a.kind === "issue" ? `Issue #${a.result.number} opened` : `Impact report posted on PR #${a.payload.pr}`} <ArrowUpRight size={14} />
                 </a>
                 {a.result.labels?.length ? <span className="text-muted">label: {a.result.labels.join(", ")}</span> : null}
                 {a.result.reviewers?.length ? <span className="text-muted">reviewers requested: {a.result.reviewers.join(", ")}</span> : null}
@@ -123,6 +150,7 @@ function ApprovalCard({ a, primary, onChange }: { a: Approval; primary: boolean;
             )}
           </div>
         )}
+        {a.status === "pending" && a.last_error && <p className="rounded-card border border-accent p-3 text-small">{a.last_error}</p>}
         {error && <p className="text-small text-accent">{error}</p>}
       </div>
     </article>

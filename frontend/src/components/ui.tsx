@@ -98,14 +98,24 @@ export function EmptyState({ message, action }: { message: string; action?: Reac
   );
 }
 
-export function CypherBlock({ cypher, ms }: { cypher: string; ms?: number }) {
+export function CodeBlock({ label, code, meta }: { label: string; code: string; meta?: ReactNode }) {
   return (
     <div className="rounded-card bg-code">
       <div className="flex items-center justify-between px-4 pt-3 text-[12px] text-muted">
-        <span>Cypher · GRAPH.RO_QUERY</span>
-        {ms !== undefined && <span className="tabular-nums">{ms} ms</span>}
+        <span>{label}</span>
+        {meta}
       </div>
-      <pre className="overflow-x-auto px-4 pb-4 pt-2 font-mono [font-variant-ligatures:none] text-[12.5px] leading-[1.6] text-ink">{cypher.replace(/^ {6}/gm, "  ")}</pre>
+      <pre className="overflow-x-auto px-4 pb-4 pt-2 font-mono [font-variant-ligatures:none] text-[12.5px] leading-[1.6] text-ink">{code}</pre>
     </div>
+  );
+}
+
+export function CypherBlock({ cypher, ms }: { cypher: string; ms?: number }) {
+  return (
+    <CodeBlock
+      label="Cypher · GRAPH.RO_QUERY"
+      code={cypher.replace(/^ {6}/gm, "  ")}
+      meta={ms !== undefined && <span className="tabular-nums">{ms} ms</span>}
+    />
   );
 }

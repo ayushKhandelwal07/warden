@@ -150,11 +150,19 @@ export type Approval = {
   status: ApprovalStatus;
   created_at: number;
   requested_by: string;
+  last_error?: string | null;
   decided_at?: number;
   reason?: string | null;
-  payload: Plan & { patches?: { service: string; files: PatchFile[] }[]; pr?: number; comment?: string; risk?: string };
-  result?: { executed: boolean; reason?: string; prs?: { service: string; number: number; url: string }[]; url?: string; labels?: string[]; reviewers?: string[] };
+  payload: Plan & {
+    patches?: { service: string; files: PatchFile[] }[]; pr?: number; comment?: string; risk?: string;
+    trigger?: { why: string; commit?: string } | null; body?: string; title?: string; gate?: { passed: boolean; checks: { check: string; ok: boolean; detail: string }[] };
+  };
+  result?: { executed: boolean; reason?: string; prs?: { service: string; number: number; url: string }[]; url?: string; number?: number; labels?: string[]; reviewers?: string[] };
 };
+
+export type WatchEvent = { id: string; at: number; kind: string; text: string; link: string | null };
+export type WatchState = { enabled: boolean; interval: number; branch: string | null; last_check: number | null; last_status: string; busy: boolean };
+export type WatchSnapshot = { state: WatchState; events: WatchEvent[]; github?: boolean };
 
 export type GithubStatus = { configured: boolean; target?: string; reason?: string };
 
@@ -214,15 +222,18 @@ export class ApiError extends Error {
   }
 }
 
+/** Where the API lives. Empty in dev (Vite proxies /api); set VITE_API_URL when the UI is hosted separately (Vercel). */
+export const API_BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
+
 async function getJson<T>(path: string): Promise<T> {
-  const res = await fetch(path);
+  const res = await fetch(API_BASE + path);
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new ApiError(res.status, body.error ?? `${res.status} ${res.statusText}`);
   return body as T;
 }
 
 async function postJson<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  const res = await fetch(API_BASE + path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new ApiError(res.status, data.error ?? `${res.status} ${res.statusText}`);
   return data as T;
@@ -239,6 +250,10 @@ export const api = {
   approve: (id: string) => postJson<Approval>(`/api/approvals/${id}/approve`, {}),
   reject: (id: string, reason: string) => postJson<Approval>(`/api/approvals/${id}/reject`, { reason }),
   github: () => getJson<GithubStatus>("/api/github"),
+  watch: () => getJson<WatchSnapshot>("/api/watch"),
+  watchEnable: (enabled: boolean) => postJson<{ state: WatchState }>("/api/watch/enable", { enabled }),
+  watchCheck: () => postJson<WatchSnapshot & { result: { ok: boolean; status?: string; synced?: boolean; proposals?: string[] } }>("/api/watch/check", {}),
+  watchSimulate: (service: string, isPublic: boolean) => postJson<{ result: { changed: boolean }; events: WatchEvent[] }>("/api/watch/simulate", { service, public: isPublic }),
   syncStatus: () => getJson<SyncStatus>("/api/sync"),
   sync: (ref: string) => postJson<SyncRecord>("/api/sync", { ref }),
   whatIf: (service: string) => postJson<WhatIf>("/api/whatif", { service }),

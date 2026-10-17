@@ -1,16 +1,37 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
-import { ArrowRight, Check, LoaderCircle, ShieldAlert, ShieldCheck } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, LoaderCircle, ShieldAlert, ShieldCheck } from "lucide-react";
 import type { Evidence, ToolResult } from "../lib/api";
 import type { AgentEvent } from "../lib/ask";
 import { PathGraph } from "./PathGraph";
 import { ToolResultView } from "./ToolResultView";
-import { Window } from "./ui";
 
 export type Turn = { question: string; events: AgentEvent[]; done: boolean };
 
+type Ev<T extends AgentEvent["type"]> = Extract<AgentEvent, { type: T }>;
+
+/** Everything a turn produced, derived from its event stream. */
+export function summarize(turn: Turn) {
+  const calls = turn.events.filter((e): e is Ev<"tool_call"> => e.type === "tool_call");
+  const results = new Map(turn.events.filter((e): e is Ev<"tool_result"> => e.type === "tool_result").map((e) => [e.id, e.result]));
+  const answer = turn.events.find((e): e is Ev<"answer"> => e.type === "answer");
+  const error = turn.events.find((e): e is Ev<"error"> => e.type === "error");
+  const approvalId = [...results.values()].map((r) => (r as ToolResult & { approval_id?: string }).approval_id).find(Boolean);
+  return { calls, results, answer, error, approvalId, corrected: turn.events.some((e) => e.type === "correction") };
+}
+
+export function mergeEvidence(results: ToolResult[]): Evidence {
+  const nodes = new Map<string, Evidence["nodes"][number]>();
+  const edges = new Map<string, Evidence["edges"][number]>();
+  results.forEach((r) => {
+    r.evidence?.nodes.forEach((n) => nodes.has(n.id) || nodes.set(n.id, n));
+    r.evidence?.edges.forEach((e) => edges.set(e.id, e));
+  });
+  return { nodes: [...nodes.values()], edges: [...edges.values()] };
+}
+
 /** Minimal, safe rendering of the agent's answer: paragraphs, "- " bullets and **bold** (no HTML injection). */
-function Answer({ text }: { text: string }) {
+export function Answer({ text }: { text: string }) {
   const inline = (s: string): ReactNode[] =>
     s.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
       part.startsWith("**") && part.endsWith("**") ? (
@@ -27,7 +48,7 @@ function Answer({ text }: { text: string }) {
   const flush = () => {
     if (bullets.length)
       out.push(
-        <ul key={`u${out.length}`} className="mt-2 flex flex-col gap-1.5">
+        <ul key={`u${out.length}`} className="mt-2 flex flex-col gap-1">
           {bullets.map((b, i) => (
             <li key={i} className="flex gap-2">
               <span className="text-muted">·</span>
@@ -39,128 +60,117 @@ function Answer({ text }: { text: string }) {
     bullets = [];
   };
   lines.forEach((l) => {
-    if (/^[-•*]\s+/.test(l)) bullets.push(l.replace(/^[-•*]\s+/, ""));
+    if (/^[-•*·]\s*/.test(l) && l.length > 2) bullets.push(l.replace(/^[-•*·]\s*/, ""));
     else {
       flush();
       out.push(
-        <p key={`p${out.length}`} className={out.length ? "mt-3" : ""}>
+        <p key={`p${out.length}`} className={out.length ? "mt-2" : ""}>
           {inline(l)}
         </p>,
       );
     }
   });
   flush();
-  return <div className="text-[16px] leading-[1.6]">{out}</div>;
+  return <div className="text-[15px] leading-[1.55]">{out}</div>;
 }
 
-function mergeEvidence(results: ToolResult[]): Evidence {
-  const nodes = new Map<string, Evidence["nodes"][number]>();
-  const edges = new Map<string, Evidence["edges"][number]>();
-  results.forEach((r) => {
-    r.evidence?.nodes.forEach((n) => nodes.has(n.id) || nodes.set(n.id, n));
-    r.evidence?.edges.forEach((e) => edges.set(e.id, e));
-  });
-  return { nodes: [...nodes.values()], edges: [...edges.values()] };
-}
-
-export function AgentTurn({ turn }: { turn: Turn }) {
+/** One exchange: the question bubble, then a compact answer bubble. Tap the answer to show its evidence. */
+export function ChatTurn({ turn, selected, onSelect }: { turn: Turn; selected: boolean; onSelect: () => void }) {
+  const [trace, setTrace] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
-  const start = turn.events.find((e) => e.type === "start") as Extract<AgentEvent, { type: "start" }> | undefined;
-  const calls = turn.events.filter((e) => e.type === "tool_call") as Extract<AgentEvent, { type: "tool_call" }>[];
-  const results = new Map(
-    (turn.events.filter((e) => e.type === "tool_result") as Extract<AgentEvent, { type: "tool_result" }>[]).map((e) => [e.id, e.result]),
-  );
-  const answer = turn.events.find((e) => e.type === "answer") as Extract<AgentEvent, { type: "answer" }> | undefined;
-  const error = turn.events.find((e) => e.type === "error") as Extract<AgentEvent, { type: "error" }> | undefined;
-  const corrections = turn.events.filter((e) => e.type === "correction").length;
-  const evidence = useMemo(() => mergeEvidence([...results.values()]), [turn.events.length]);
-  const approvalId = [...results.values()].map((r) => (r as ToolResult & { approval_id?: string }).approval_id).find(Boolean);
-  const openResult = open ? results.get(open) : undefined;
+  const s = summarize(turn);
+  const secs = s.answer ? (s.answer.ms / 1000).toFixed(1) : null;
+  const openResult = open ? s.results.get(open) : undefined;
 
   return (
-    <Window
-      title={<span className="text-ink">{turn.question}</span>}
-      actions={
-        start && (
-          <span className="text-[12px] text-muted">
-            {start.model} · tools via {start.via === "mcp" ? "MCP" : "direct calls"}
-          </span>
-        )
-      }
-    >
-      <ol className="flex flex-col gap-1 border-b border-line px-6 py-4">
-        {calls.map((c) => {
-          const r = results.get(c.id);
-          return (
-            <li key={c.id}>
-              <button onClick={() => setOpen(open === c.id ? null : c.id)} disabled={!r} className="flex w-full items-baseline gap-3 py-1 text-left text-small">
-                <span className="mt-0.5 w-4 shrink-0 self-start text-muted">
-                  {r ? r.error ? <ShieldAlert size={14} /> : <Check size={14} /> : <LoaderCircle size={14} className="animate-spin" />}
-                </span>
-                <span className="shrink-0 font-mono text-[12.5px]">{c.tool}</span>
-                <span className="shrink-0 font-mono text-[11.5px] text-muted">
-                  {Object.entries(c.args)
-                    .map(([k, v]) => `${k}=${Array.isArray(v) ? v.join("|") : v}`)
-                    .join(" ")}
-                </span>
-                <span className="min-w-0 flex-1 truncate text-muted">{r ? r.error ?? r.summary : "running…"}</span>
-                {r && <span className="shrink-0 tabular-nums text-muted">{r.ms} ms</span>}
-              </button>
-            </li>
-          );
-        })}
-        {!calls.length && !answer && !error && (
-          <li className="flex items-center gap-3 py-1 text-small text-muted">
-            <LoaderCircle size={14} className="animate-spin" /> Choosing tools…
-          </li>
-        )}
-        {corrections > 0 && <li className="py-1 text-small text-muted">Verifier sent the draft back once: it named something no tool returned.</li>}
-      </ol>
-
-      {openResult && (
-        <div className="border-b border-line bg-tint p-4">
-          <ToolResultView result={openResult} />
-        </div>
-      )}
-
-      <div className="px-6 py-5">
-        {error ? (
-          <p className="text-small text-accent">{error.message}</p>
-        ) : answer ? (
-          <>
-            <Answer text={answer.text} />
-            <div className="mt-4 flex flex-wrap items-center gap-4 text-small">
-              {answer.verdict.ok ? (
-                <span className="inline-flex items-center gap-1.5 text-ok">
-                  <ShieldCheck size={15} /> Every name in this answer traces to a tool result
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 text-accent">
-                  <ShieldAlert size={15} />
-                  {answer.verdict.no_tools ? "Answered without graph evidence" : `Not backed by a tool result: ${answer.verdict.unsupported.join(", ")}`}
-                </span>
-              )}
-              <span className="text-muted">
-                {calls.length} tool call{calls.length === 1 ? "" : "s"} · {(answer.ms / 1000).toFixed(1)} s
-              </span>
-              {approvalId && (
-                <Link to="/approvals" className="inline-flex items-center gap-1 font-medium hover:opacity-80">
-                  Review the proposal in Approvals <ArrowRight size={14} />
-                </Link>
-              )}
-            </div>
-          </>
-        ) : (
-          <p className="text-small text-muted">Thinking…</p>
-        )}
+    <div className="flex flex-col gap-3">
+      <div className="flex justify-end">
+        <p className="max-w-[85%] rounded-[20px] rounded-br-md bg-ink px-4 py-2.5 text-[14.5px] text-white">{turn.question}</p>
       </div>
 
-      {answer && evidence.nodes.length > 0 && (
-        <div className="border-t border-line px-4 pt-4">
-          <p className="px-2 text-small text-muted">Evidence: every node and edge below came back from the graph during this answer.</p>
+      <div
+        onClick={onSelect}
+        className={`max-w-[94%] cursor-pointer rounded-[20px] rounded-bl-md border p-4 transition-colors ${selected ? "border-ink" : "border-line hover:border-muted"}`}
+      >
+        {s.error ? (
+          <p className="text-small text-accent">{s.error.message}</p>
+        ) : s.answer ? (
+          <Answer text={s.answer.text} />
+        ) : (
+          <p className="flex items-center gap-2 text-small text-muted">
+            <LoaderCircle size={14} className="animate-spin" /> {s.calls.length ? "Reading the graph…" : "Choosing tools…"}
+          </p>
+        )}
+
+        {(s.calls.length > 0 || s.answer) && (
+          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-[12px] text-muted" onClick={(e) => e.stopPropagation()}>
+            {s.answer &&
+              (s.answer.verdict.ok ? (
+                <span className="inline-flex items-center gap-1 text-ok" title="Every service and CVE named in the answer appears in a tool result">
+                  <ShieldCheck size={13} /> Verified
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-accent" title={s.answer.verdict.unsupported.join(", ")}>
+                  <ShieldAlert size={13} /> {s.answer.verdict.no_tools ? "No graph evidence" : "Unverified claim"}
+                </span>
+              ))}
+            <button onClick={() => setTrace((t) => !t)} className="inline-flex items-center gap-1 hover:text-ink">
+              {s.calls.length} tool{s.calls.length === 1 ? "" : "s"}
+              {secs && ` · ${secs}s`} <ChevronDown size={12} className={trace ? "rotate-180" : ""} />
+            </button>
+            {s.corrected && <span>self-corrected once</span>}
+            {s.approvalId && (
+              <Link to="/approvals" className="inline-flex items-center gap-1 font-medium text-ink hover:opacity-80">
+                Review proposal <ArrowRight size={12} />
+              </Link>
+            )}
+          </div>
+        )}
+
+        {trace && (
+          <ol className="mt-2 flex flex-col gap-0.5 border-t border-line pt-2" onClick={(e) => e.stopPropagation()}>
+            {s.calls.map((c) => {
+              const r = s.results.get(c.id);
+              return (
+                <li key={c.id}>
+                  <button onClick={() => setOpen(open === c.id ? null : c.id)} disabled={!r} className="flex w-full items-center gap-2 py-1 text-left text-[12px]">
+                    {r ? r.error ? <ShieldAlert size={12} className="shrink-0 text-muted" /> : <Check size={12} className="shrink-0 text-muted" /> : <LoaderCircle size={12} className="shrink-0 animate-spin" />}
+                    <span className="shrink-0 font-mono">{c.tool}</span>
+                    <span className="min-w-0 flex-1 truncate text-muted">{r ? r.error ?? r.summary : "running…"}</span>
+                    {r && <span className="shrink-0 tabular-nums text-muted">{r.ms} ms</span>}
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+        )}
+        {openResult && (
+          <div className="mt-2 rounded-card bg-tint p-2" onClick={(e) => e.stopPropagation()}>
+            <ToolResultView result={openResult} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** The evidence for one answer: the merged path graph. On wide screens it is a sticky side panel. */
+export function EvidencePanel({ turn }: { turn: Turn | undefined }) {
+  const s = turn ? summarize(turn) : undefined;
+  const evidence = useMemo(() => (s ? mergeEvidence([...s.results.values()]) : { nodes: [], edges: [] }), [turn?.events.length]);
+  return (
+    <div className="rounded-window border border-line bg-bg">
+      <div className="border-b border-line px-4 py-3">
+        <p className="text-small font-medium">Evidence</p>
+        <p className="truncate text-[12px] text-muted">{turn ? turn.question : "Ask something; the path behind the answer shows up here."}</p>
+      </div>
+      <div className="p-3">
+        {evidence.nodes.length ? (
           <PathGraph evidence={evidence} />
-        </div>
-      )}
-    </Window>
+        ) : (
+          <p className="px-2 py-10 text-center text-small text-muted">{turn && !s?.answer ? "Waiting for the graph…" : "No graph for this answer."}</p>
+        )}
+      </div>
+    </div>
   );
 }

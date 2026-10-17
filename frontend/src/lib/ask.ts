@@ -1,4 +1,4 @@
-import type { ToolResult } from "./api";
+import { API_BASE, type ToolResult } from "./api";
 
 export type AgentEvent =
   | { type: "start"; model: string; via: "mcp" | "direct"; tools: number }
@@ -10,7 +10,7 @@ export type AgentEvent =
 
 /** Streams one agent turn from /api/ask (server-sent events over a POST). */
 export async function streamAsk(question: string, history: { role: string; content: string }[], onEvent: (e: AgentEvent) => void) {
-  const res = await fetch("/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question, history }) });
+  const res = await fetch(API_BASE + "/api/ask", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question, history }) });
   if (!res.ok || !res.body) {
     onEvent({ type: "error", message: `${res.status} ${res.statusText}` });
     return;
