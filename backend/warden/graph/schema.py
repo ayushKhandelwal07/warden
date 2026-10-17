@@ -37,6 +37,7 @@ FULLTEXT = [
     ("Vulnerability", ["id", "summary"]),
     ("Person", ["name", "login"]),
     ("PullRequest", ["title"]),
+    ("Incident", ["title", "summary"]),
 ]
 
 

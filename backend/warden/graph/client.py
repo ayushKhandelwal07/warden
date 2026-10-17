@@ -14,6 +14,7 @@ def db() -> FalkorDB:
         port=config.FALKORDB_PORT,
         username=config.FALKORDB_USERNAME,
         password=config.FALKORDB_PASSWORD,
+        ssl=config.FALKORDB_SSL,
     )
 
 

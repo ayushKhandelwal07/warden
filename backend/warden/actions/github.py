@@ -101,3 +101,36 @@ def get_pr(number: int) -> dict:
         files = _ok(gh.get(f"/repos/{repo}/pulls/{number}/files", params={"per_page": 100}))
     return {"number": pr["number"], "title": pr["title"], "url": pr["html_url"], "state": pr["state"], "merged": pr.get("merged", False),
             "author": pr["user"]["login"], "files": [f["filename"] for f in files]}
+
+
+def branch_head(branch: str) -> str:
+    """Commit sha at the tip of a branch on the fork (one cheap call; the watcher polls this)."""
+    repo = target()
+    with _client() as gh:
+        return _ok(gh.get(f"/repos/{repo}/commits/{branch}"))["sha"]
+
+
+def edit_file(path: str, branch: str, transform, message: str) -> dict:
+    """Read a file on `branch`, apply `transform(text) -> text`, commit it. Fork only (target() guards upstream)."""
+    repo = target()
+    with _client() as gh:
+        cur = _ok(gh.get(f"/repos/{repo}/contents/{path}", params={"ref": branch}))
+        old = base64.b64decode(cur["content"]).decode()
+        new = transform(old)
+        if new == old:
+            return {"changed": False}
+        res = _ok(
+            gh.put(
+                f"/repos/{repo}/contents/{path}",
+                json={"message": message, "content": base64.b64encode(new.encode()).decode(), "branch": branch, "sha": cur["sha"]},
+            )
+        )
+    return {"changed": True, "sha": res["commit"]["sha"], "url": res["commit"]["html_url"]}
+
+
+def list_prs(state: str = "all", limit: int = 30) -> list[dict]:
+    repo = target()
+    with _client() as gh:
+        rows = _ok(gh.get(f"/repos/{repo}/pulls", params={"state": state, "per_page": limit, "sort": "updated", "direction": "desc"}))
+    return [{"number": p["number"], "title": p["title"], "state": p["state"], "merged": bool(p.get("merged_at")), "url": p["html_url"],
+             "head": p["head"]["ref"], "author": p["user"]["login"]} for p in rows]

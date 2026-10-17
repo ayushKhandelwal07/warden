@@ -1,0 +1,36 @@
+# CURATED, SYNTHETIC incident history for the demo org (disclosed in the README and the UI).
+# Incidents are tied to services and to the *kind* of change that triggered them, never to a real
+# upstream pull request or its author: these incidents did not happen in the real project.
+incidents:
+  - id: PM-001
+    title: Checkout errors after an OpenTelemetry JS upgrade in the Node services
+    date: 2023-05-24
+    severity: SEV2
+    services: [currencyservice, paymentservice, checkoutservice]
+    trigger: {kind: dependency-bump, package: "@opentelemetry"}
+    summary: A coordinated OpenTelemetry JS bump changed exporter defaults; currency and payment calls from checkout timed out for 40 minutes.
+    lesson: Bump instrumentation libraries one service at a time and watch checkout latency.
+  - id: PM-003
+    title: Frontend 5xx after a gRPC client upgrade
+    date: 2023-05-20
+    severity: SEV1
+    services: [frontend, checkoutservice, shippingservice]
+    trigger: {kind: dependency-bump, package: google.golang.org/grpc}
+    summary: A grpc-go upgrade changed keepalive defaults; the frontend's long-lived connections to checkout and shipping were reset under load.
+    lesson: gRPC upgrades on the frontend need a load test against checkout before rollout.
+  - id: PM-005
+    title: paymentservice crash loop after a Node.js base image change
+    date: 2023-05-12
+    severity: SEV1
+    services: [paymentservice, checkoutservice]
+    trigger: {kind: base-image, package: node}
+    summary: A Node.js base image update changed OpenSSL behaviour; payment pods crash-looped and checkout could not charge cards.
+    lesson: Base image changes to PCI services need a Payments review and a canary.
+  - id: PM-006
+    title: Shipping quote failures after a health-check change
+    date: 2023-06-08
+    severity: SEV2
+    services: [shippingservice, checkoutservice]
+    trigger: {kind: config, package: health-check}
+    summary: Removing a health probe binary left shipping pods marked ready too early; checkout got errors quoting shipping for 15 minutes.
+    lesson: Health-check changes need a readiness test in staging.

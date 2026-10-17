@@ -9,7 +9,7 @@ import json
 from warden import config
 from warden.graph.client import rw, unwind
 
-STRUCTURAL = ["CALLS", "EXPOSED_VIA", "REACHES", "DEPENDS_ON", "REQUIRES", "AFFECTED_BY", "LISTED_IN", "OWNED_BY", "READS"]
+STRUCTURAL = ["CALLS", "EXPOSED_VIA", "REACHES", "DEPENDS_ON", "REQUIRES", "AFFECTED_BY", "LISTED_IN", "OWNED_BY", "READS", "AFFECTED"]
 
 
 def blob_url(ref: str, path: str) -> str:
@@ -131,6 +131,25 @@ def load_curated(teams: list, assets: list, policies: list, run: int, g: str | N
     )
 
 
+def load_incidents(incidents: list[dict], run: int, g: str | None = None):
+    """Curated, synthetic incidents: tied to services and a change kind/package, never to a real PR or person."""
+    unwind(
+        f"""MERGE (i:Incident {{id: row.id}})
+        SET i.title = row.title, i.occurred_at = row.date, i.severity = row.severity, i.summary = row.summary,
+            i.lesson = row.lesson, i.trigger_kind = row.trigger_kind, i.trigger_package = row.trigger_package,
+            i.source_type = 'curated'
+        WITH i, row UNWIND row.services AS sname
+        MATCH (s:Service {{name: sname}})
+        MERGE (i)-[a:AFFECTED]->(s) SET a.run = {run}""",
+        [
+            {**{k: v for k, v in x.items() if k != "trigger"}, "date": str(x["date"]), "trigger_kind": x["trigger"]["kind"],
+             "trigger_package": x["trigger"]["package"]}
+            for x in incidents
+        ],
+        g,
+    )
+
+
 def load_history(h: dict, g: str | None = None):
     unwind(
         "MERGE (p:Person {key: row.key}) SET p.name = row.name, p.login = row.login, p.is_bot = row.is_bot, p.source_type = 'git'",
@@ -194,4 +213,10 @@ def prune_stale(run: int, g: str | None = None) -> dict:
     for rel in STRUCTURAL:
         rows, _ = rw(f"MATCH ()-[e:{rel}]->() WHERE e.run IS NULL OR e.run <> $run DELETE e RETURN count(e) AS n", {"run": run}, g)
         removed[rel] = rows[0]["n"] if rows else 0
+    # Facts that only exist because a service ships them: once nothing depends on a package, it and the
+    # advisories that only affected it leave the live graph (snapshots keep the history).
+    rows, _ = rw("MATCH (p:Package) WHERE NOT ()-[:DEPENDS_ON]->(p) DETACH DELETE p RETURN count(p) AS n", graph_name=g)
+    removed["orphan_packages"] = rows[0]["n"] if rows else 0
+    rows, _ = rw("MATCH (v:Vulnerability) WHERE NOT ()-[:AFFECTED_BY]->(v) DETACH DELETE v RETURN count(v) AS n", graph_name=g)
+    removed["orphan_vulnerabilities"] = rows[0]["n"] if rows else 0
     return removed

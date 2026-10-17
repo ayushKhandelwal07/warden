@@ -17,8 +17,7 @@ from typing import AsyncIterator
 import httpx
 from mcp.client import Client
 
-from warden import config, impact, planner
-from warden.actions import approvals, patches
+from warden import config, impact, planner, proposals
 from warden.graph.client import ro
 from warden.mcp_client import _content_json, server_params
 from warden.tools import run_tool
@@ -147,16 +146,12 @@ async def _run_local(name: str, args: dict) -> dict:
     """Action tools: they only create pending approvals."""
     if name == "propose_fix_plan":
         plan = await asyncio.to_thread(planner.build_plan, int(args.get("max_fixes") or 5))
-        if not plan["items"]:
-            return {"tool": name, "summary": plan["summary"], "rows": [], "error": None, "queries": []}
-        for it in plan["items"]:
-            it["major"] = patches.major_bump(it["from"], it["to"])
-        payload = {k: v for k, v in plan.items() if k != "queries"}
-        payload["patches"] = patches.build_patches(plan["items"])
-        a = approvals.create("fix_plan", f"Upgrade {len(plan['items'])} package{'s' if len(plan['items']) != 1 else ''} across {len(payload['patches'])} services", plan["summary"], payload, requested_by="agent")
+        a, blocked = await asyncio.to_thread(proposals.file_fix_plan, plan, "agent", {"why": "Requested in chat"})
+        if not a:
+            return {"tool": name, "summary": f"No proposal filed. {blocked}", "rows": [], "error": None, "queries": plan.get("queries", [])}
         rows = [{"package": i["package"], "from": i["from"], "to": i["to"], "services": ", ".join(i["services"]), "kev": i["kev"]} for i in plan["items"]]
-        return {"tool": name, "summary": plan["summary"] + f" Filed as pending approval {a['id']}; a human must approve it.",
-                "columns": list(rows[0]), "rows": rows, "error": None, "queries": plan["queries"], "approval_id": a["id"], "plan": payload}
+        return {"tool": name, "summary": plan["summary"] + f" Gate passed. Filed as pending approval {a['id']}; a human must approve it.",
+                "columns": list(rows[0]), "rows": rows, "error": None, "queries": plan["queries"], "approval_id": a["id"]}
     if name == "analyze_pr":
         try:
             rep = await asyncio.to_thread(impact.analyze, int(args["pr"]), "history")

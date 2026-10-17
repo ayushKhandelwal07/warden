@@ -1,4 +1,5 @@
 """OSV.dev -> Vulnerability, AFFECTED_BY {fixed}. All responses cached on disk."""
+import re
 from concurrent.futures import ThreadPoolExecutor
 
 from cvss import CVSS3, CVSS4
@@ -59,13 +60,19 @@ def _label(score: float | None, rec: dict) -> str | None:
     return LABEL_FROM_DB.get(str(db).upper()) if db else None
 
 
+def _cve_key(cve: str) -> tuple:
+    m = re.match(r"CVE-(\d+)-(\d+)", cve)
+    return (int(m.group(1)), int(m.group(2))) if m else (0, 0)
+
+
 def _canonical(rec: dict) -> str:
+    """Canonical id = the newest CVE alias (merged advisories list older, related CVEs too), else GHSA, else OSV id."""
     ids = [rec["id"], *rec.get("aliases", [])]
-    for prefix in ("CVE-", "GHSA-"):
-        hits = sorted(i for i in ids if i.startswith(prefix))
-        if hits:
-            return hits[0]
-    return rec["id"]
+    cves = sorted((i for i in ids if i.startswith("CVE-")), key=_cve_key, reverse=True)
+    if cves:
+        return cves[0]
+    ghsa = sorted(i for i in ids if i.startswith("GHSA-"))
+    return ghsa[0] if ghsa else rec["id"]
 
 
 def _fixed_version(rec: dict, pkg: dict) -> str | None:

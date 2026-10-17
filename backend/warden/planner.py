@@ -113,6 +113,18 @@ def rehearse(chosen: list[dict], graph_name: str | None = None) -> dict:
     return {"graph": copy, "after_paths": after_paths, "new_advisories": new_advisories, "ms": round((time.perf_counter() - t0) * 1000)}
 
 
+def _gate(before: dict, after: dict, added: list[tuple]) -> dict:
+    """Rehearsal gate: a fix is only proposed if the graph copy *proves* it helps and breaks nothing new."""
+    new_bad = [(v, s) for v, s in added if after["by_key"][(v, s)]["kev"] or after["by_key"][(v, s)]["severity"] == "CRITICAL"]
+    checks = [
+        {"check": "total risk drops", "ok": after["risk"] < before["risk"], "detail": f"{round(before['risk'])} → {round(after['risk'])}"},
+        {"check": "KEV findings eliminated or reduced", "ok": after["kev_findings"] == 0 or after["kev_findings"] < before["kev_findings"],
+         "detail": f"{before['kev_findings']} → {after['kev_findings']}"},
+        {"check": "no new critical or KEV finding", "ok": not new_bad, "detail": ", ".join(f"{v} on {s}" for v, s in new_bad) or "none"},
+    ]
+    return {"passed": all(c["ok"] for c in checks), "checks": checks}
+
+
 def build_plan(max_fixes: int = 5, graph_name: str | None = None) -> dict:
     trace = Trace()
     before_paths = scored_paths(trace, graph_name=graph_name)
@@ -139,6 +151,7 @@ def build_plan(max_fixes: int = 5, graph_name: str | None = None) -> dict:
                 "changes": sorted({(p["service"], p["manifest"], p["direct"]) for p in c["removable"]}),
             }
         )
+    gate = _gate(before, after, added)
     pct = 0 if not before["risk"] else round(100 * (before["risk"] - after["risk"]) / before["risk"])
     kev_left = after["kev_findings"]
     summary = (
@@ -149,6 +162,7 @@ def build_plan(max_fixes: int = 5, graph_name: str | None = None) -> dict:
     strip = lambda d: {k: v for k, v in d.items() if k not in ("keys", "by_key")}  # noqa: E731
     return {
         "summary": summary,
+        "gate": gate,
         "items": items,
         "before": strip(before),
         "after": strip(after),

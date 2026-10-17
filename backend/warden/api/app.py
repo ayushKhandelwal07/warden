@@ -4,17 +4,19 @@
 """
 import os
 
+import asyncio
 import json
 from contextlib import asynccontextmanager
 
 from fastapi import Body, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 import yaml
 
-from warden import agent, config, impact, mcp_client, planner, sync
+from warden import agent, config, impact, mcp_client, planner, proposals, sync, watch
 from warden.tools.base import ToolError
 from warden.actions import approvals, github, patches
 from warden.graph import overview
@@ -27,11 +29,15 @@ async def lifespan(_app):
         await agent.MCP.start()
     except Exception as e:  # the agent falls back to calling tools directly, and says so
         print(f"MCP session failed to start: {e}")
+    task = asyncio.create_task(watch.loop())
     yield
+    task.cancel()
     await agent.MCP.close()
 
 
 app = FastAPI(title="Warden API", lifespan=lifespan)
+# The frontend can be deployed separately (Vercel) and call this API cross-origin.
+app.add_middleware(CORSMiddleware, allow_origins=config.CORS_ORIGINS, allow_methods=["GET", "POST"], allow_headers=["Content-Type"])
 
 BROWSER_URL = os.getenv("FALKORDB_BROWSER_URL", "http://localhost:3000")
 
@@ -75,15 +81,8 @@ def create_plan(body: dict = Body(default_factory=dict)):
     try:
         max_fixes = max(1, min(8, int(body.get("max_fixes", 5))))
         plan = planner.build_plan(max_fixes)
-        if not plan["items"]:
-            return {"approval": None, "plan": plan}
-        for it in plan["items"]:
-            it["major"] = patches.major_bump(it["from"], it["to"])
-        payload = {k: v for k, v in plan.items() if k != "queries"}
-        payload["patches"] = patches.build_patches(plan["items"])
-        kev = " (covers every CISA KEV path)" if plan["after"]["kev_findings"] == 0 and plan["before"]["kev_findings"] else ""
-        approval = approvals.create("fix_plan", f"Upgrade {len(plan['items'])} package{'s' if len(plan['items']) != 1 else ''} across {len(payload['patches'])} services{kev}", plan["summary"], payload)
-        return {"approval": approval, "plan": plan}
+        approval, blocked = proposals.file_fix_plan(plan, requested_by="you", trigger={"why": "Requested from the UI"})
+        return {"approval": approval, "plan": plan, "blocked": blocked}
     except Exception as e:
         return JSONResponse(status_code=503, content={"error": f"{type(e).__name__}: {str(e)[:200]}"})
 
@@ -146,6 +145,44 @@ async def ask(body: dict = Body(default_factory=dict)):
             yield sse({"type": "error", "message": f"{type(e).__name__}: {str(e)[:300]}"})
 
     return StreamingResponse(events(), media_type="text/event-stream", headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+
+@app.get("/api/watch")
+def watch_status():
+    try:
+        return {"state": watch.state(), "events": watch.events(), "github": github.configured()}
+    except Exception as e:
+        return JSONResponse(status_code=503, content={"error": str(e)[:200]})
+
+
+@app.post("/api/watch/enable")
+def watch_enable(body: dict = Body(default_factory=dict)):
+    return {"state": watch.set_enabled(bool(body.get("enabled")))}
+
+
+@app.post("/api/watch/check")
+async def watch_check():
+    res = await asyncio.to_thread(watch.tick)
+    return {"result": res, "state": watch.state(), "events": watch.events()}
+
+
+@app.post("/api/watch/simulate")
+async def watch_simulate(body: dict = Body(default_factory=dict)):
+    """Demo helper: commit a one-line exposure change to the fork so the watcher has something real to notice."""
+    service = str(body.get("service") or "paymentservice")
+    if service not in sync_services():
+        return JSONResponse(status_code=400, content={"error": f"Unknown service '{service}'."})
+    try:
+        res = await asyncio.to_thread(watch.set_exposure, service, bool(body.get("public", True)))
+    except Exception as e:
+        return JSONResponse(status_code=503, content={"error": f"{type(e).__name__}: {str(e)[:200]}"})
+    return {"result": res, "service": service, "events": watch.events()}
+
+
+def sync_services() -> set[str]:
+    from warden.graph.client import ro
+
+    return {r["n"] for r in ro("MATCH (s:Service) RETURN s.name AS n")[0]}
 
 
 @app.get("/api/sync")

@@ -70,14 +70,34 @@ class Evidence:
         self.nodes: dict[str, dict] = {}
         self.edges: dict[str, dict] = {}
 
-    def add_path(self, p: Path, ordered: bool = True) -> "Evidence":
+    def add_path(self, p: Path, ordered: bool = True, orders: list[int] | None = None) -> "Evidence":
+        """Adds a path. `order` = position along it (or `orders[i]`); a node seen twice keeps the smaller order,
+        so merged paths still lay out as left-to-right columns."""
         for i, n in enumerate(p.nodes()):
-            nj = node_json(n, i if ordered else None)
-            self.nodes.setdefault(nj["id"], nj)
+            order = orders[i] if orders else (i if ordered else None)
+            nj = node_json(n, order)
+            cur = self.nodes.get(nj["id"])
+            if cur is None:
+                self.nodes[nj["id"]] = nj
+            elif order is not None and (cur.get("order") is None or order < cur["order"]):
+                cur["order"] = order
         for e in p.edges():
             ej = edge_json(e)
             self.edges.setdefault(ej["id"], ej)
         return self
+
+    def add_node(self, n: Node, order: int | None = None) -> "Evidence":
+        nj = node_json(n, order)
+        self.nodes.setdefault(nj["id"], nj)
+        return self
+
+    def add_edge(self, e: Edge) -> "Evidence":
+        ej = edge_json(e)
+        self.edges.setdefault(ej["id"], ej)
+        return self
+
+    def __bool__(self) -> bool:
+        return bool(self.nodes)
 
     def to_json(self) -> dict:
         return {"nodes": list(self.nodes.values()), "edges": list(self.edges.values())}
