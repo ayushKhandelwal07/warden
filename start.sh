@@ -15,8 +15,8 @@ command -v python3 >/dev/null || command -v python >/dev/null || { echo "python 
 docker info >/dev/null 2>&1 || { echo "Docker is not running."; exit 1; }
 [ -f "$ROOT/.env" ] || { cp "$ROOT/.env.example" "$ROOT/.env"; echo "Created .env: add LLM_API_KEY (and GitHub settings)."; }
 
-step "Starting FalkorDB (graph on :6380, Browser on :3000)"
-docker compose -f "$ROOT/docker-compose.yml" up -d falkordb >/dev/null
+step "Starting FalkorDB (graph :6380, Browser :3000) and Postgres (:5433)"
+docker compose -f "$ROOT/docker-compose.yml" up -d falkordb postgres >/dev/null
 
 step "Backend dependencies"
 [ -d "$BACKEND/.venv" ] || (python3 -m venv "$BACKEND/.venv" 2>/dev/null || python -m venv "$BACKEND/.venv")

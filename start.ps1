@@ -25,8 +25,8 @@ if (-not (Test-Path (Join-Path $root ".env"))) {
     Write-Host "Created .env from .env.example. Add LLM_API_KEY (and GitHub settings) to use the agent and PRs." -ForegroundColor Yellow
 }
 
-Step "Starting FalkorDB (graph on :6380, Browser on :3000)"
-docker compose -f (Join-Path $root "docker-compose.yml") up -d falkordb | Out-Null
+Step "Starting FalkorDB (graph :6380, Browser :3000) and Postgres (:5433)"
+docker compose -f (Join-Path $root "docker-compose.yml") up -d falkordb postgres | Out-Null
 
 Step "Backend dependencies"
 if (-not (Test-Path $py)) { python -m venv (Join-Path $backend ".venv") }
