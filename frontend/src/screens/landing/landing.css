@@ -1,0 +1,85 @@
+/* Landing page motion. Token colours only (see DESIGN.md); the ease is the "spring-out" curve used throughout. */
+.lp {
+  --ease: cubic-bezier(0.32, 0.72, 0, 1);
+  font-feature-settings: "cv11", "ss01", "ss03";
+}
+
+/* Nav: full-width and transparent at the top, a floating white pill once you scroll. */
+.lp-nav {
+  transition: max-width 0.42s var(--ease), height 0.42s var(--ease), padding 0.42s var(--ease), background-color 0.42s var(--ease),
+    box-shadow 0.42s var(--ease), border-radius 0.42s var(--ease), margin-top 0.42s var(--ease);
+  max-width: 1200px;
+  height: 70px;
+  border-radius: 0 0 28px 28px;
+  background-color: rgb(255 255 255 / 0);
+  box-shadow: 0 24px 60px 0 rgb(17 17 17 / 0);
+}
+.lp-nav.is-floating {
+  max-width: 840px;
+  height: 58px;
+  margin-top: 0;
+  background-color: rgb(255 255 255 / 0.96);
+  box-shadow: 0 24px 60px 0 rgb(17 17 17 / 0.12);
+}
+
+/* Scroll reveals */
+.lp-reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.8s var(--ease), transform 0.8s var(--ease);
+}
+.lp-reveal.is-in {
+  opacity: 1;
+  transform: none;
+}
+
+/* Hero entrance */
+@keyframes lp-rise {
+  from { opacity: 0; transform: translateY(18px); filter: blur(6px); }
+  to { opacity: 1; transform: none; filter: none; }
+}
+.lp-rise { animation: lp-rise 0.9s var(--ease) both; }
+
+/* Soft warm glow behind the hero (accent at very low alpha + tint) */
+.lp-glow {
+  background:
+    radial-gradient(60% 55% at 12% 70%, rgb(17 17 17 / 0.045), transparent 70%),
+    radial-gradient(55% 60% at 92% 80%, rgb(255 74 0 / 0.11), transparent 70%),
+    radial-gradient(40% 40% at 70% 10%, var(--color-tint), transparent 70%);
+}
+
+/* Agent step toast inside the product window */
+@keyframes lp-toast {
+  0% { opacity: 0; transform: translateY(-8px) scale(0.97); }
+  12%, 88% { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: translateY(-4px) scale(0.99); }
+}
+.lp-toast { animation: lp-toast 2.4s var(--ease) both; }
+
+@keyframes lp-spin { to { transform: rotate(360deg); } }
+.lp-spin { animation: lp-spin 1s linear infinite; }
+
+/* Typing caret */
+@keyframes lp-caret { 50% { opacity: 0; } }
+.lp-caret::after { content: ""; display: inline-block; width: 2px; height: 1em; margin-left: 2px; vertical-align: -0.12em; background: currentColor; animation: lp-caret 1s step-end infinite; }
+
+/* Infinite marquee (the track holds the list twice) */
+@keyframes lp-marquee { to { transform: translateX(-50%); } }
+.lp-marquee { animation: lp-marquee 38s linear infinite; }
+.lp-marquee-mask { mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent); }
+
+/* Path chain: each hop draws in */
+@keyframes lp-hop { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: none; } }
+.lp-hop { animation: lp-hop 0.5s var(--ease) both; }
+
+/* Progress bar under a step chip */
+@keyframes lp-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+.lp-fill { transform-origin: left; animation: lp-fill var(--dur, 3s) linear both; }
+
+.lp-noscroll::-webkit-scrollbar { display: none; }
+.lp-noscroll { scrollbar-width: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-rise, .lp-toast, .lp-marquee, .lp-hop, .lp-fill, .lp-spin { animation: none !important; }
+  .lp-reveal { opacity: 1; transform: none; }
+}

@@ -94,6 +94,7 @@ Subcopy under a display headline: 18px muted, with the key sentence in ink, weig
 - **Borders** are `--line` #d6d6d6 (strengthened from #e8e8e8 on Oct 17 so cards read on light screens).
 - **List + detail** pages (Approvals) put a 340px list on the left and the detail on the right; on phones they become two pages with a back link.
 - **Side panels** (evidence, tool runs) are right drawers on desktop and bottom sheets on phones.
+- **Landing page** (Oct 17, modelled on the incredible.one layout, our content only): 75px/600 hero at -0.035em, 21px semibold muted subline with the key sentence in ink, 48px pills, a nav that morphs from full-width to a floating white pill on scroll, a pinned product window that grows as you scroll, a source marquee, scroll-lit paragraphs, a scroll-driven step story, a use-case carousel with count-ups, a live stats band, an auto-rotating feature panel, and a footer with a faded wordmark. Glows use only `--tint` and the accent at ≤16% alpha. All motion uses `cubic-bezier(0.32, 0.72, 0, 1)` and switches off under `prefers-reduced-motion`. No customer logos, testimonials or invented numbers: every figure is live from the demo graph or measured by the planner.
 
 ## Path graph (cytoscape)
 
