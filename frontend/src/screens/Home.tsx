@@ -6,6 +6,7 @@ import { api, notifyApprovalsChanged, type Approval, type Overview } from "../li
 import { useApi } from "../lib/useApi";
 import { BaselineCompare } from "../components/BaselineCompare";
 import { ChokePoints } from "../components/ChokePoints";
+import { ContradictionsPanel } from "../components/ContradictionsPanel";
 import { ComparePlans } from "../components/ComparePlans";
 import { Funnel } from "../components/Funnel";
 import { GateView } from "../components/GateView";
@@ -168,6 +169,8 @@ export function Home() {
       )}
 
       <ChokePoints />
+
+      <ContradictionsPanel />
 
       <ComparePlans
         onFiled={(blocked) => {

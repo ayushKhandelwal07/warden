@@ -27,7 +27,8 @@ const KIND = {
 
 const TABS = [
   { key: "pending", label: "Pending", match: (a: Approval) => a.status === "pending" },
-  { key: "approved", label: "Approved", match: (a: Approval) => a.status.startsWith("approved") || a.status === "failed" },
+  { key: "approved", label: "Approved", match: (a: Approval) => (a.status.startsWith("approved") || a.status === "failed") && !a.verified },
+  { key: "verified", label: "Verified", match: (a: Approval) => !!a.verified },
   { key: "rejected", label: "Rejected", match: (a: Approval) => a.status === "rejected" },
 ] as const;
 type TabKey = (typeof TABS)[number]["key"];

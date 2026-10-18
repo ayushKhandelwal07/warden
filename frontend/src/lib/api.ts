@@ -204,6 +204,7 @@ export type ApprovalStatus = "pending" | "approved" | "approved_not_executed" | 
 
 export type Approval = {
   id: string;
+  verified?: boolean;
   kind: string;
   title: string;
   summary: string;
@@ -220,6 +221,10 @@ export type Approval = {
   };
   result?: { executed: boolean; reason?: string; prs?: { service: string; number: number; url: string }[]; url?: string; number?: number; labels?: string[]; reviewers?: string[] };
 };
+
+export type Contradiction = { id: string; kind: string; subject: string; detail: string; resolution: string; sources: string[]; status: string; service: string | null; package: string | null; vuln: string | null };
+export const CONTRADICTIONS_CHANGED = "warden:contradictions";
+export const notifyContradictionsChanged = () => window.dispatchEvent(new Event(CONTRADICTIONS_CHANGED));
 
 export type ReplayCall = {
   tool: string; args: Record<string, unknown>; status: "same" | "changed" | "not_replayed" | "error"; queries: { cypher: string; ms: number }[];
@@ -388,6 +393,8 @@ export const api = {
   createPlan: (maxFixes = 5, pick?: { variant: string; constraints: PlanConstraints }) =>
     postJson<{ approval: Approval | null; plan: Plan; blocked?: string | null }>("/api/plans", { max_fixes: maxFixes, ...(pick ?? {}) }),
   comparePlans: (constraints: PlanConstraints) => postJson<PlanCompare>("/api/plans/compare", { constraints }),
+  contradictions: () => getJson<{ items: Contradiction[] }>("/api/contradictions"),
+  scanContradictions: () => postJson<{ open: number; checked: Record<string, number>; items: Contradiction[] }>("/api/contradictions/scan", {}),
   replay: (chat: string, turn: number, against: "current" | "golden") => postJson<ReplayResult>(`/api/replay/${chat}/${turn}`, { against }),
   verification: (id: string) => getJson<Verification>(`/api/approvals/${id}/verification`),
   preflight: (id: string) => postJson<{ preflight: Verification["preflight"] }>(`/api/approvals/${id}/preflight`, {}),

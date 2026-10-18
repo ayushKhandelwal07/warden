@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { ArrowUpRight, CheckCircle2, CircleAlert, ShieldCheck } from "lucide-react";
 import { api, type Evidence, type EvidenceEdge } from "../lib/api";
+import { useContradictions } from "../lib/useContradictions";
 
 const KIND: Record<string, { label: string; cls: string }> = {
   sourced: { label: "sourced", cls: "border-ink text-ink" },
@@ -13,6 +14,12 @@ const KIND: Record<string, { label: string; cls: string }> = {
 export function PathProof({ evidence, title = "How each hop is known", compact }: { evidence: Evidence; title?: string; compact?: boolean }) {
   const [state, setState] = useState<{ busy: boolean; valid?: boolean; checked?: number; missing?: string[]; ms?: number; error?: string }>({ busy: false });
   const names = useMemo(() => new Map(evidence.nodes.map((n) => [n.id, n])), [evidence]);
+  const { items: disputes } = useContradictions();
+  const onPath = useMemo(() => {
+    const svc = new Set(evidence.nodes.filter((n) => n.label === "Service").map((n) => n.name));
+    const pkg = new Set(evidence.nodes.filter((n) => n.label === "Package").map((n) => n.name));
+    return disputes.filter((d) => (d.service && svc.has(d.service)) || (d.package && pkg.has(d.package)));
+  }, [disputes, evidence]);
   const rows = useMemo(() => {
     const order = (e: EvidenceEdge) => Math.min(names.get(e.source)?.order ?? 99, names.get(e.target)?.order ?? 99);
     return [...evidence.edges].filter((e) => e.provenance).sort((a, b) => order(a) - order(b));
@@ -39,6 +46,11 @@ export function PathProof({ evidence, title = "How each hop is known", compact }
           <ShieldCheck size={13} /> {state.busy ? "Checking…" : "Validate in graph"}
         </button>
       </header>
+      {onPath.length > 0 && (
+        <p className="flex items-center gap-2 border-b border-line px-4 py-2 text-[12.5px] text-accent" role="status">
+          <CircleAlert size={14} /> {onPath.length} open contradiction{onPath.length === 1 ? "" : "s"} on this path: {onPath[0].detail}
+        </p>
+      )}
       {(state.valid !== undefined || state.error) && (
         <p className={`flex items-center gap-2 border-b border-line px-4 py-2 text-[12.5px] ${state.valid ? "text-ok" : "text-accent"}`} role="status">
           {state.error ? (
