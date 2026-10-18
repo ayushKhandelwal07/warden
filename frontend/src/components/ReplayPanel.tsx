@@ -24,7 +24,7 @@ export function ReplayPanel({ chatId, turn }: { chatId: string; turn: number }) 
         </button>
         {r && (
           <button onClick={() => run(st.against === "current" ? "golden" : "current")} disabled={st.busy} className="text-muted hover:text-ink">
-            {st.against === "current" ? "Against the demo snapshot instead" : "Against the current graph"}
+            {st.against === "current" ? "Against the pinned release instead" : "Against the current graph"}
           </button>
         )}
       </div>

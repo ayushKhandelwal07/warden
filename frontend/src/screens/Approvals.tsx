@@ -99,12 +99,6 @@ function Detail({ a, repo, onChange }: { a: Approval; repo?: string; onChange: (
         <GithubLinks a={a} repo={repo} />
       </header>
 
-      {a.payload.demo && (
-        <p className="rounded-card border border-line bg-code px-4 py-2.5 text-[12.5px] text-muted">
-          <span className="font-medium text-ink">Demo history.</span> Seeded so you can see the full flow. The numbers and gate results are real for this graph; nothing was sent to GitHub for the past records.
-        </p>
-      )}
-
       {a.payload.trigger?.why && (
         <div className="rounded-card border border-line p-4 text-small">
           <p className="font-medium">Why now</p>
@@ -236,7 +230,6 @@ function ListItem({ a, active }: { a: Approval; active: boolean }) {
         <span className="ml-auto">{when(a.created_at)}</span>
       </span>
       <span className="line-clamp-2 text-small font-medium">{a.title}</span>
-      {a.payload.demo && <span className="w-fit rounded-full border border-line px-2 py-0.5 text-[11px] text-muted">demo history</span>}
     </Link>
   );
 }
@@ -250,7 +243,6 @@ export function Approvals() {
   const items = useMemo(() => (list.data ?? []).map((a) => overrides[a.id] ?? a), [list.data, overrides]);
   const selected = items.find((a) => a.id === id);
   const [tab, setTab] = useState<TabKey>("pending");
-  const [seeding, setSeeding] = useState(false);
   const [single, setSingle] = useState<{ a: Approval | null; error?: string } | null>(null);
 
   // Keep the list fresh when something else files an approval (the agent, the watcher, PR impact).
@@ -327,21 +319,7 @@ export function Approvals() {
       ) : list.error ? (
         <EmptyState message={`Couldn't load approvals (${list.error.message}).`} action={<Button icon={<RotateCw size={16} />} onClick={list.reload}>Retry</Button>} />
       ) : items.length === 0 ? (
-        <EmptyState
-          message="Nothing waiting. Ask for a fix plan, or analyse a fork PR, and it lands here for your approval. Or load the demo history to see a rejected upgrade, a rehearsed plan and a verified fix."
-          action={
-            <Button
-              variant="primary"
-              disabled={seeding}
-              onClick={() => {
-                setSeeding(true);
-                api.seedDemo().then(() => { setSeeding(false); list.reload(); notifyApprovalsChanged(); }, () => setSeeding(false));
-              }}
-            >
-              {seeding ? "Loading the demo history…" : "Load demo history"}
-            </Button>
-          }
-        />
+        <EmptyState message="Nothing waiting. Ask for a fix plan, or analyse a fork PR, and it lands here for your approval." />
       ) : (
         <div className="grid gap-8 lg:grid-cols-[340px_minmax(0,1fr)]">
           <aside className={`lg:sticky lg:top-6 lg:block lg:max-h-[calc(100dvh-48px)] lg:self-start lg:overflow-y-auto ${id ? "hidden" : ""}`} aria-label="Approvals">

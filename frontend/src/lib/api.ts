@@ -218,7 +218,7 @@ export type Approval = {
   reason?: string | null;
   payload: Plan & {
     patches?: { service: string; files: PatchFile[] }[]; pr?: number; comment?: string; risk?: string;
-    demo?: boolean; demo_kind?: string; trigger?: { why: string; commit?: string } | null; body?: string; title?: string; gate?: Gate; regression?: Regression; proof?: Proof | null; unsafe_demo?: boolean;
+    trigger?: { why: string; commit?: string } | null; body?: string; title?: string; gate?: Gate; regression?: Regression; proof?: Proof | null; unsafe_demo?: boolean;
   };
   result?: { executed: boolean; reason?: string; prs?: { service: string; number: number; url: string }[]; url?: string; number?: number; labels?: string[]; reviewers?: string[] };
 };
@@ -400,7 +400,6 @@ export const api = {
   createPlan: (maxFixes = 5, pick?: { variant: string; constraints: PlanConstraints }) =>
     postJson<{ approval: Approval | null; plan: Plan; blocked?: string | null }>("/api/plans", { max_fixes: maxFixes, ...(pick ?? {}) }),
   comparePlans: (constraints: PlanConstraints) => postJson<PlanCompare>("/api/plans/compare", { constraints }),
-  seedDemo: () => postJson<{ created: string[]; existing: string[] }>("/api/demo/seed", {}),
   surface: () => getJson<Surface>("/api/surface"),
   publicSurface: () => getJson<Surface>("/api/public/surface"),
   contradictions: () => getJson<{ items: Contradiction[] }>("/api/contradictions"),

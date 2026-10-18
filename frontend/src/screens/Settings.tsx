@@ -268,7 +268,7 @@ function Projects() {
         </ul>
       </Panel>
 
-      <Panel title="New project" sub="Starts from the Online Boutique sample: a private copy of its graph that your team can sync, fix and decide on.">
+      <Panel title="New project" sub="Starts from the Google Microservices sample: a private copy of its graph that your team can sync, fix and decide on.">
         {admins.length ? (
           <form onSubmit={create} className="flex flex-col gap-3">
             <div className="flex flex-wrap gap-2">

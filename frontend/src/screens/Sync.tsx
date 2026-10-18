@@ -192,7 +192,7 @@ export function Sync() {
               </Button>
             ) : (
               <Button icon={<RotateCcw size={16} />} onClick={() => setConfirmReset(true)}>
-                Reset demo
+                Reset to the pinned release
               </Button>
             )
           ) : null}

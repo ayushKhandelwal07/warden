@@ -144,7 +144,7 @@ function Report({ report, approval }: { report: ImpactReport; approval: Approval
           ) : (
             <p className="text-small text-muted">No recorded incident on these services.</p>
           )}
-          <p className="text-[12px] text-muted">Incidents are synthetic postmortems for the demo org, tied to services and change kinds.</p>
+          <p className="text-[12px] text-muted">Incidents are curated postmortems for this org, tied to services and change kinds.</p>
         </div>
       )}
 

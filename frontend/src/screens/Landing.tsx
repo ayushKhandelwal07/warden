@@ -458,7 +458,7 @@ function StoryPanel({ step, data, plan }: { step: number; data: PublicOverview |
               <span className="w-12 text-right font-semibold tabular-nums">{risk}</span>
             </div>
           ))}
-          {!top && <p className="px-4 py-3 text-[13px] text-muted">Demo data unavailable.</p>}
+          {!top && <p className="px-4 py-3 text-[13px] text-muted">Data unavailable.</p>}
           <p className="px-4 py-3 text-[12px] text-muted">risk = severity × exploit (KEV, EPSS) × exposure (0.5^hops) × data</p>
         </div>
       )}
@@ -989,7 +989,7 @@ function FeatureMock({ i }: { i: number }) {
     return (
       <div className="rise-in flex w-full max-w-[520px] flex-col gap-2 text-[13.5px]">
         {[
-          ["bg-ok", "Fork demo-base moved to b62dd36; re-reading the graph"],
+          ["bg-ok", "Fork moved to a new commit; re-reading the graph"],
           ["bg-accent", "paymentservice became internet-facing: issue proposed"],
           ["bg-ok", "Decision verified: KEV path gone"],
         ].map(([dot, text], k) => (
@@ -1085,7 +1085,7 @@ function UnderTheHood({ data }: { data: PublicOverview | null | undefined }) {
 
 const NEXT_STEPS = [
   { icon: Users, title: "Create an account", note: "Email and password, about 30 seconds." },
-  { icon: Network, title: "Land in the demo project", note: "A live FalkorDB graph of Online Boutique." },
+  { icon: Network, title: "Land in the project", note: "A live FalkorDB graph of Google Microservices." },
   { icon: MessageSquare, title: "Ask what to fix first", note: "Get the answer with the path that proves it." },
   { icon: GitPullRequest, title: "Invite your team", note: "Share a link; everyone asks the same graph." },
 ];

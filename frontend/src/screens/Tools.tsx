@@ -14,6 +14,7 @@ const GROUPS = [
   { label: "People", hint: "Who owns and knows the code", cats: ["people"] },
   { label: "Changes & policy", hint: "What a change touches and which rules apply", cats: ["changes", "policy"] },
   { label: "Memory", hint: "What the team already decided", cats: ["memory"] },
+  { label: "Repo and graph", hint: "The live repository, any person, any read-only query", cats: ["repo", "graph"] },
 ];
 const ADVANCED = new Set(["find_entity", "pr_touched_services"]);
 

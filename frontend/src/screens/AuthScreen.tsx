@@ -41,7 +41,7 @@ export function AuthScreen({ mode }: { mode: "login" | "signup" }) {
     try {
       const m = mode === "login" ? await api.login(form.email, form.password, invite) : await api.signup(form.name, form.email, form.password, invite);
       setMe(m);
-      // An invite lands you in the team you just joined; otherwise the shared demo project.
+      // An invite lands you in the team you just joined; otherwise the shared project.
       const p = (info && m.projects.find((x) => x.org_id === info.org_id)) || defaultProject(m);
       nav(p ? `/app/${p.slug}/home` : "/", { replace: true });
     } catch (err) {
@@ -67,7 +67,7 @@ export function AuthScreen({ mode }: { mode: "login" | "signup" }) {
               ? "Log in to your team's security graph."
               : info
                 ? `You'll join ${info.org_name} and every project in it.`
-                : "You'll join the Online Boutique demo project, ready to ask."}
+                : "You'll join the Google Microservices project, ready to ask."}
           </p>
           {info && (
             <div className="mt-6 flex items-center gap-3 rounded-card border border-line p-4 text-small">
