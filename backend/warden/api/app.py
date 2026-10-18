@@ -452,6 +452,25 @@ def get_baseline():
         return JSONResponse(status_code=503, content={"error": str(e)[:200]})
 
 
+@app.get("/api/eval")
+def get_eval():
+    """The last evaluation scorecard (None until it has been run)."""
+    from warden import eval as ev
+
+    return ev.last() or {"scenarios": [], "pending": [], "metrics": None}
+
+
+@app.post("/api/eval/run")
+def run_eval():
+    """Runs every scenario on throwaway graphs (eval_*) through the real tools and gate, then deletes them."""
+    from warden import eval as ev
+
+    try:
+        return ev.run()
+    except Exception as e:
+        return JSONResponse(status_code=503, content={"error": str(e)[:200]})
+
+
 @app.get("/api/metrics")
 def get_metrics():
     """Every headline number with its unit, definition, Cypher and the snapshot it describes."""
