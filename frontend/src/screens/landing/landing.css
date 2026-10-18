@@ -17,9 +17,10 @@
 .lp-nav.is-floating {
   max-width: 840px;
   height: 58px;
-  margin-top: 0;
-  background-color: rgb(255 255 255 / 0.96);
-  box-shadow: 0 24px 60px 0 rgb(17 17 17 / 0.12);
+  margin-top: 8px;
+  border-radius: 999px;
+  background-color: rgb(255 255 255 / 0.97);
+  box-shadow: 0 0 0 1px rgb(17 17 17 / 0.08), 0 10px 24px -8px rgb(17 17 17 / 0.22), 0 30px 70px -24px rgb(17 17 17 / 0.28);
 }
 
 /* Scroll reveals */
@@ -83,3 +84,17 @@
   .lp-rise, .lp-toast, .lp-marquee, .lp-hop, .lp-fill, .lp-spin { animation: none !important; }
   .lp-reveal { opacity: 1; transform: none; }
 }
+
+/* Section bands: each part of the page gets its own surface, so you can see where one ends and the next starts. */
+.lp-band { position: relative; padding: 48px 20px; }
+@media (min-width: 640px) { .lp-band { padding: 64px 24px; } }
+.lp-band-grey {
+  background-color: var(--color-code);
+  background-image: radial-gradient(rgb(17 17 17 / 0.07) 1px, transparent 1px);
+  background-size: 22px 22px;
+  border-top: 1px solid var(--color-line);
+  border-bottom: 1px solid var(--color-line);
+}
+.lp-band-dark { background-color: var(--color-ink); color: #fff; }
+/* Cards that sit on a band lift off it. */
+.lp-card { background: var(--color-bg); border: 1px solid var(--color-line); box-shadow: 0 1px 2px rgb(17 17 17 / 0.04), 0 18px 40px -22px rgb(17 17 17 / 0.28); }

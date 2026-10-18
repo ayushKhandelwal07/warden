@@ -68,6 +68,16 @@ function Pill({ to, href, dark, big, children, onClick }: { to?: string; href?: 
   );
 }
 
+/** Small label above each section heading, so every part of the page announces itself. */
+function Eyebrow({ label, dark }: { label: string; dark?: boolean }) {
+  return (
+    <span className={`mb-4 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-[12.5px] font-semibold tracking-[0.01em] ${dark ? "border-white/15 bg-white/5 text-white/70" : "border-line bg-bg text-ink/60"}`}>
+      <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+      {label}
+    </span>
+  );
+}
+
 /* ───────────────────────────── Nav ───────────────────────────── */
 
 function Nav({ app, signedIn }: { app: string; signedIn: boolean }) {
@@ -208,7 +218,7 @@ function ProductWindow({ data }: { data: PublicOverview | null | undefined }) {
   const hero = data?.hero;
   return (
     // A tall track with a sticky window: as you scroll, the window grows to full size, like a device coming closer.
-    <div ref={ref} className="relative -mt-4 h-auto md:h-[150vh]">
+    <div ref={ref} className="relative -mt-4 h-auto md:h-[125vh]">
       <div className="top-[84px] md:sticky">
         <div
           ref={boxRef}
@@ -286,7 +296,7 @@ function ProductWindow({ data }: { data: PublicOverview | null | undefined }) {
 function Hero({ app, signedIn }: { app: string; signedIn: boolean }) {
   return (
     <section className="lp-glow relative">
-      <div className="mx-auto max-w-[980px] px-5 pb-14 pt-14 text-center sm:pt-20">
+      <div className="mx-auto max-w-[980px] px-5 pb-12 pt-12 text-center sm:pt-16">
         <h1 className="lp-rise text-[44px] font-semibold leading-[1.08] tracking-[-0.035em] sm:text-[62px] lg:text-[75px]">
           AI that fixes what
           <br className="hidden sm:block" /> attackers can reach
@@ -317,7 +327,7 @@ const SOURCES = ["FalkorDB", "OSV.dev", "CISA KEV", "FIRST EPSS", "NVD", "GitHub
 
 function SourceStrip() {
   return (
-    <section className="border-y border-line/60 bg-bg py-6" aria-label="Data sources">
+    <section className="mt-10 border-y border-line bg-bg py-6" aria-label="Data sources">
       <div className="lp-marquee-mask overflow-hidden">
         <div className="lp-marquee flex w-max items-center gap-14 pr-14">
           {[...SOURCES, ...SOURCES].map((s, k) => (
@@ -335,7 +345,7 @@ function SourceStrip() {
 
 function DarkCard({ lead, body, icon, delay }: { lead: string; body: string; icon: ReactNode; delay: number }) {
   return (
-    <Reveal delay={delay} className="flex flex-col justify-between gap-10 rounded-[28px] bg-ink p-8 text-white sm:min-h-[300px] sm:p-9">
+    <Reveal delay={delay} className="flex flex-col justify-between gap-10 rounded-[24px] bg-ink p-7 text-white shadow-[0_24px_50px_-24px_rgba(17,17,17,0.6)] sm:min-h-[260px] sm:p-8">
       <p className="text-[18px] leading-[1.5] tracking-[-0.01em] text-white/55 sm:text-[19px]">
         <span className="font-semibold text-white">{lead}</span> {body}
       </p>
@@ -346,16 +356,17 @@ function DarkCard({ lead, body, icon, delay }: { lead: string; body: string; ico
 
 function WorksAcross() {
   return (
-    <section id="how" className="scroll-mt-24 px-5 pt-28 sm:pt-36">
+    <section id="how" className="lp-band lp-band-grey scroll-mt-16">
       <div className="mx-auto max-w-[1080px]">
         <Reveal>
-          <h2 className="max-w-[900px] text-[38px] font-semibold leading-[1.08] tracking-[-0.03em] sm:text-[55px]">Warden works across your code, your graph and your GitHub</h2>
+          <Eyebrow label="How it works" />
+          <h2 className="max-w-[900px] text-[32px] font-semibold leading-[1.1] tracking-[-0.03em] sm:text-[46px]">Warden works across your code, your graph and your GitHub</h2>
         </Reveal>
         <ScrollWords
-          className="mt-6 max-w-[620px] text-[19px] font-semibold leading-[1.5] tracking-[-0.015em] sm:text-[21px]"
+          className="mt-4 max-w-[620px] text-[19px] font-semibold leading-[1.5] tracking-[-0.015em] sm:text-[21px]"
           parts={[{ text: "You ask a question, and Warden" }, { text: " walks the graph to answer it,", strong: true }, { text: " then proposes the fix where your team already works." }]}
         />
-        <div className="mt-14 grid gap-4 md:grid-cols-3">
+        <div className="mt-8 grid gap-4 md:grid-cols-3">
           <DarkCard
             delay={0}
             icon={<GitBranch size={20} />}
@@ -511,11 +522,12 @@ function Story() {
   const ticked = useTicker(STORY.length, 2600, seen && !pinned);
   const step = pinned ? Math.min(STORY.length - 1, Math.floor(p * STORY.length)) : ticked;
   return (
-    <section className="px-5 pt-28 sm:pt-36">
+    <section className="lp-band">
       <Reveal className="mx-auto max-w-[900px] text-center">
-        <h2 className="text-[38px] font-semibold leading-[1.08] tracking-[-0.03em] sm:text-[55px]">Watch Warden turn one exploited CVE into a merged fix</h2>
+        <Eyebrow label="One finding, end to end" />
+        <h2 className="text-[32px] font-semibold leading-[1.1] tracking-[-0.03em] sm:text-[46px]">Watch Warden turn one exploited CVE into a merged fix</h2>
       </Reveal>
-      <div ref={ref} className="relative mx-auto mt-10 max-w-[1080px] md:h-[300vh]">
+      <div ref={ref} className="relative mx-auto mt-6 max-w-[1080px] md:h-[200vh]">
         <div className="top-[96px] flex flex-col gap-5 md:sticky">
           <div className="lp-noscroll -mx-5 flex gap-2 overflow-x-auto px-5 sm:mx-0 sm:flex-wrap sm:justify-center sm:px-0">
             {ACTIONS.map((a, k) => (
@@ -529,12 +541,12 @@ function Story() {
               </span>
             ))}
           </div>
-          <div ref={boxRef} className="relative overflow-hidden rounded-[28px] border border-line bg-bg shadow-[0_30px_80px_-40px_rgba(17,17,17,0.3)]">
+          <div ref={boxRef} className="lp-card relative overflow-hidden rounded-[28px]">
             <div className="h-[380px] sm:h-[420px]">
               <StoryPanel step={step} />
             </div>
             <div className="pointer-events-none absolute inset-x-0 bottom-5 flex justify-center px-4">
-              <span key={step} className="rise-in rounded-full border border-line bg-bg px-5 py-2.5 text-center text-[15px] font-semibold shadow-window sm:text-[17px]">
+              <span key={step} className="rise-in rounded-full bg-ink px-5 py-2.5 text-center text-[15px] font-semibold text-white shadow-window sm:text-[17px]">
                 {STORY[step]}
               </span>
             </div>
@@ -555,6 +567,8 @@ function Story() {
 const USE_CASES = [
   {
     who: "For security teams",
+    path: ["Internet", "frontend", "CVE-2023-44487"],
+    call: "reachable_findings()",
     body: "Start the week with the one finding that matters, the path that proves it and the fix that removes it.",
     chips: [
       { icon: ScanSearch, n: 256, label: (n: number) => `Scanned ${n} advisories` },
@@ -565,6 +579,8 @@ const USE_CASES = [
   },
   {
     who: "For platform engineers",
+    path: ["5 upgrades", "graph copy", "gate passed"],
+    call: "propose_fix_plan(max_fixes=5)",
     body: "Get the fewest upgrades that remove the most risk, rehearsed on a graph copy before any PR is opened.",
     chips: [
       { icon: Sparkles, n: 5, label: (n: number) => `Picked ${n} upgrades` },
@@ -575,6 +591,8 @@ const USE_CASES = [
   },
   {
     who: "For reviewers",
+    path: ["PR #1789", "checkoutservice", "frontend"],
+    call: "analyze_pr(pr=1789)",
     body: "Before you merge, see what a PR touches, what breaks three hops away and who has changed this code before.",
     chips: [
       { icon: Network, n: 3, label: (n: number) => `Found ${n} dependents` },
@@ -585,6 +603,8 @@ const USE_CASES = [
   },
   {
     who: "For engineering leads",
+    path: ["Proposal", "Approved", "Verified"],
+    call: 'decisions_about("frontend")',
     body: "Every approval and rejection is a decision in the graph, and the watcher checks each one after the next release.",
     chips: [
       { icon: Inbox, n: 7, label: (n: number) => `Reviewed ${n} proposals` },
@@ -598,29 +618,49 @@ const USE_CASES = [
 function UseCaseCard({ c, app }: { c: (typeof USE_CASES)[number]; app: (p: string) => string }) {
   const [ref, seen] = useInView<HTMLDivElement>("0px");
   return (
-    <div ref={ref} className="flex w-[300px] shrink-0 snap-start flex-col rounded-[24px] border border-line bg-bg sm:w-[420px]">
-      <div className="relative h-[230px] overflow-hidden rounded-t-[24px] bg-code/70">
-        <div className="absolute right-5 top-6 flex flex-col items-end gap-3">
+    <div ref={ref} className="lp-card flex w-[290px] shrink-0 snap-start flex-col rounded-[22px] sm:w-[360px]">
+      <div className="flex flex-col gap-3 rounded-t-[22px] border-b border-line bg-tint p-4" style={{ backgroundImage: "radial-gradient(80% 90% at 100% 0%, rgb(255 74 0 / 0.09), transparent 70%)" }}>
+        <div className="flex items-center gap-2 rounded-lg bg-ink px-3 py-2 font-mono text-[11.5px] text-white shadow-[0_8px_20px_-10px_rgba(17,17,17,0.6)]">
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
+          <span className="min-w-0 flex-1 truncate">{c.call}</span>
+          <span className={`shrink-0 text-[10.5px] transition-colors duration-500 ${seen ? "text-ok" : "text-white/40"}`} style={{ transitionDelay: "1400ms" }}>
+            {seen ? "done" : "running"}
+          </span>
+        </div>
+        <div className="flex items-center gap-1 overflow-hidden">
+          {c.path.map((node, k) => (
+            <span key={node} className="flex min-w-0 items-center gap-1">
+              {k > 0 && <ArrowRight size={12} className="shrink-0 text-muted" />}
+              <span
+                className={`truncate rounded-full border bg-bg px-2.5 py-1 font-mono text-[11px] transition-all duration-500 ${k === c.path.length - 1 ? "border-accent text-accent" : "border-line"} ${seen ? "opacity-100" : "opacity-0"}`}
+                style={{ transitionDelay: `${k * 160}ms` }}
+              >
+                {node}
+              </span>
+            </span>
+          ))}
+        </div>
+        <div className="flex flex-col gap-1.5">
           {c.chips.map((ch, k) => (
             <span
               key={k}
-              className={`inline-flex items-center gap-2.5 rounded-xl border border-line bg-bg py-2 pl-2.5 pr-3 text-[13px] font-medium shadow-[0_8px_24px_-12px_rgba(17,17,17,0.25)] transition-all duration-700 ${seen ? "translate-y-0 opacity-100" : "translate-y-3 opacity-0"}`}
-              style={{ transitionDelay: `${k * 220}ms` }}
+              className={`flex items-center gap-2.5 rounded-xl border border-line bg-bg px-3 py-2 text-[13px] font-medium transition-all duration-700 ${seen ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"}`}
+              style={{ transitionDelay: `${300 + k * 180}ms` }}
             >
-              <ch.icon size={15} className="text-muted" />
-              {seen ? <CountLabel n={ch.n} render={ch.label} /> : ch.label(0)}
-              <span className={`h-3 w-3 rounded-full border ${seen ? "border-ok bg-ok" : "border-line"} transition-colors duration-700`} style={{ transitionDelay: `${900 + k * 220}ms` }} />
+              <ch.icon size={14} className="shrink-0 text-muted" />
+              <span className="min-w-0 flex-1 truncate">{seen ? <CountLabel n={ch.n} render={ch.label} /> : ch.label(0)}</span>
+              <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${seen ? "bg-ok" : "bg-line"} transition-colors duration-700`} style={{ transitionDelay: `${1000 + k * 180}ms` }} />
             </span>
           ))}
         </div>
       </div>
-      <div className="flex items-end gap-4 p-6">
+      <div className="flex flex-1 items-end gap-3 p-4 sm:p-5">
         <div className="min-w-0 flex-1">
           <p className="text-[15px] font-semibold">{c.who}</p>
-          <p className="mt-1 text-[14px] leading-[1.5] text-muted">{c.body}</p>
+          <p className="mt-1 text-[13.5px] leading-[1.5] text-muted">{c.body}</p>
         </div>
-        <Link to={app(c.to)} className="inline-flex h-10 shrink-0 items-center gap-1.5 rounded-full border border-line px-4 text-[14px] font-semibold hover:border-ink">
-          Try it <ArrowRight size={15} />
+        <Link to={app(c.to)} className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full bg-ink px-3.5 text-[13.5px] font-semibold text-white transition-opacity hover:opacity-85">
+          Try it <ArrowRight size={14} />
         </Link>
       </div>
     </div>
@@ -644,36 +684,89 @@ function CountLabel({ n, render }: { n: number; render: (n: number) => string })
 
 function UseCases({ app }: { app: (p: string) => string }) {
   const track = useRef<HTMLDivElement>(null);
+  const [wrapRef, p] = useScrollProgress<HTMLDivElement>();
+  const [shift, setShift] = useState(0);
+  const [wide, setWide] = useState(() => typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches);
   const [edge, setEdge] = useState({ start: true, end: false });
+
+  // How far the row has to travel so the last card ends where the content column ends.
+  useEffect(() => {
+    const measure = () => {
+      setWide(window.matchMedia("(min-width: 768px)").matches);
+      const el = track.current;
+      if (el) setShift(Math.max(0, el.scrollWidth - el.clientWidth));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (track.current) ro.observe(track.current);
+    window.addEventListener("resize", measure);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
+
+  const pinned = wide && shift > 0 && !reducedMotion();
+  // The pinned row moves by transform only; clear any scroll offset left over from the swipe layout.
+  useEffect(() => {
+    if (pinned && track.current) track.current.scrollLeft = 0;
+  }, [pinned]);
   const onScroll = () => {
     const el = track.current;
     if (el) setEdge({ start: el.scrollLeft < 8, end: el.scrollLeft + el.clientWidth > el.scrollWidth - 8 });
   };
-  const move = (dir: number) => track.current?.scrollBy({ left: dir * 440, behavior: "smooth" });
+  const move = (dir: number) => {
+    const w = (track.current?.firstElementChild as HTMLElement | null)?.offsetWidth ?? 300;
+    track.current?.scrollBy({ left: dir * (w + 16), behavior: "smooth" });
+  };
+
   return (
-    <section id="use-cases" className="scroll-mt-24 pt-28 sm:pt-36">
-      <div className="mx-auto max-w-[1080px] px-5">
-        <Reveal>
-          <h2 className="max-w-[820px] text-[38px] font-semibold leading-[1.08] tracking-[-0.03em] sm:text-[55px]">One graph, every question your team asks</h2>
-        </Reveal>
-        <ScrollWords
-          className="mt-6 max-w-[600px] text-[19px] font-semibold leading-[1.5] tracking-[-0.015em] sm:text-[21px]"
-          parts={[{ text: "Security, platform and review work all start from the same place:" }, { text: " a path through your system.", strong: true }]}
-        />
-      </div>
-      <div ref={track} onScroll={onScroll} className="lp-noscroll mt-12 flex snap-x snap-mandatory gap-4 overflow-x-auto px-5 pb-4 sm:px-[max(20px,calc((100vw-1080px)/2))]">
-        {USE_CASES.map((c) => (
-          <UseCaseCard key={c.who} c={c} app={app} />
-        ))}
-        <span className="w-1 shrink-0" />
-      </div>
-      <div className="mx-auto mt-4 flex max-w-[1080px] justify-end gap-2 px-5">
-        <button onClick={() => move(-1)} disabled={edge.start} className="flex h-10 w-10 items-center justify-center rounded-full border border-line disabled:opacity-30" aria-label="Previous">
-          <ArrowLeft size={17} />
-        </button>
-        <button onClick={() => move(1)} disabled={edge.end} className="flex h-10 w-10 items-center justify-center rounded-full border border-line disabled:opacity-30" aria-label="Next">
-          <ArrowRight size={17} />
-        </button>
+    <section id="use-cases" className={`lp-band lp-band-grey scroll-mt-16 !px-0 ${pinned ? "!py-0" : ""}`}>
+      {/* Pinned: the wrapper is as tall as the sideways distance, so scrolling down moves the row across, then the page continues. */}
+      <div ref={wrapRef} style={pinned ? { height: `calc(100vh + ${shift}px)` } : undefined}>
+        <div className={pinned ? "sticky top-0 flex h-screen flex-col justify-center overflow-hidden pt-16" : ""}>
+          <div className="mx-auto w-full max-w-[1080px] px-5">
+            <Reveal>
+              <Eyebrow label="Use cases" />
+              <h2 className="max-w-[820px] text-[32px] font-semibold leading-[1.1] tracking-[-0.03em] sm:text-[46px]">One graph, every question your team asks</h2>
+            </Reveal>
+            <ScrollWords
+              className="mt-4 max-w-[600px] text-[19px] font-semibold leading-[1.5] tracking-[-0.015em] sm:text-[21px]"
+              parts={[{ text: "Security, platform and review work all start from the same place:" }, { text: " a path through your system.", strong: true }]}
+            />
+          </div>
+          <div
+            ref={track}
+            onScroll={onScroll}
+            className={`lp-noscroll mt-8 flex gap-4 px-5 pb-4 sm:px-[max(20px,calc((100vw-1080px)/2))] ${pinned ? "overflow-hidden" : "snap-x snap-mandatory scroll-px-5 overflow-x-auto"}`}
+          >
+            <div className="flex gap-4 will-change-transform" style={pinned ? { transform: `translate3d(${-p * shift}px,0,0)` } : undefined}>
+              {USE_CASES.map((c) => (
+                <UseCaseCard key={c.who} c={c} app={app} />
+              ))}
+            </div>
+            <span className="w-1 shrink-0" />
+          </div>
+          {pinned ? (
+            <div className="mx-auto mt-3 flex w-full max-w-[1080px] items-center gap-3 px-5">
+              <div className="h-[3px] flex-1 overflow-hidden rounded-full bg-line">
+                <div className="h-full rounded-full bg-ink" style={{ width: `${Math.max(8, p * 100)}%` }} />
+              </div>
+              <span className="text-[12px] text-muted tabular-nums">
+                {Math.min(USE_CASES.length, 1 + Math.floor(p * USE_CASES.length * 0.999))} / {USE_CASES.length}
+              </span>
+            </div>
+          ) : (
+            <div className="mx-auto mt-2 flex max-w-[1080px] justify-end gap-2 px-5">
+              <button onClick={() => move(-1)} disabled={edge.start} className="flex h-10 w-10 items-center justify-center rounded-full border border-line bg-bg disabled:opacity-30" aria-label="Previous">
+                <ArrowLeft size={17} />
+              </button>
+              <button onClick={() => move(1)} disabled={edge.end} className="flex h-10 w-10 items-center justify-center rounded-full bg-ink text-white disabled:opacity-30" aria-label="Next">
+                <ArrowRight size={17} />
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </section>
   );
@@ -684,28 +777,32 @@ function UseCases({ app }: { app: (p: string) => string }) {
 function Stats({ data }: { data: PublicOverview | null | undefined }) {
   const t = data?.totals;
   const items = [
-    { n: t?.vulnerabilities ?? 256, suffix: "", label: "known advisories in the demo org" },
-    { n: t?.reachable_vulnerabilities ?? 239, suffix: "", label: "reachable from the internet" },
-    { n: t?.kev ?? 1, suffix: "", label: "exploited in the wild, fixed first", accent: true },
-    { n: 74, suffix: "%", label: "of risk removed by 5 upgrades" },
+    { icon: ScanSearch, n: t?.vulnerabilities ?? 256, suffix: "", label: "known advisories", note: "every lockfile in the demo org" },
+    { icon: Radar, n: t?.reachable_vulnerabilities ?? 239, suffix: "", label: "reachable from the internet", note: "traced through ingress and calls" },
+    { icon: ShieldCheck, n: t?.kev ?? 1, suffix: "", label: "exploited in the wild", note: "on CISA KEV, fixed first", accent: true },
+    { icon: Sparkles, n: 74, suffix: "%", label: "of risk removed", note: "by 5 upgrades, measured on a copy" },
   ];
   return (
-    <section className="px-5 pt-28 sm:pt-36">
+    <section className="lp-band">
       <div className="mx-auto max-w-[1080px]">
         <Reveal>
-          <h2 className="max-w-[760px] text-[38px] font-semibold leading-[1.08] tracking-[-0.03em] sm:text-[55px]">From 256 alerts to the one that matters</h2>
+          <Eyebrow label="By the numbers" />
+          <h2 className="max-w-[760px] text-[32px] font-semibold leading-[1.1] tracking-[-0.03em] sm:text-[46px]">From 256 alerts to the one that matters</h2>
         </Reveal>
-        <Reveal delay={100} className="mt-12 grid grid-cols-2 gap-px overflow-hidden rounded-[28px] border border-line bg-line lg:grid-cols-4">
-          {items.map((s) => (
-            <div key={s.label} className="flex flex-col gap-2 bg-bg p-6 sm:p-8">
-              <CountUp to={s.n} suffix={s.suffix} className={`text-[44px] font-semibold leading-none tracking-[-0.04em] sm:text-[56px] ${s.accent ? "text-accent" : ""}`} />
-              <span className="text-[14px] text-muted">{s.label}</span>
-            </div>
+        <div className="mt-8 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+          {items.map((s, k) => (
+            <Reveal key={s.label} delay={k * 90} className={`lp-card flex flex-col gap-4 rounded-[22px] p-5 sm:p-6 ${s.accent ? "!border-accent/40" : ""}`}>
+              <span className={`flex h-9 w-9 items-center justify-center rounded-full ${s.accent ? "bg-accent" : "bg-ink"} text-white`}>
+                <s.icon size={16} />
+              </span>
+              <div>
+                <CountUp to={s.n} suffix={s.suffix} className={`text-[40px] font-semibold leading-none tracking-[-0.04em] sm:text-[52px] ${s.accent ? "text-accent" : ""}`} />
+                <p className="mt-2 text-[14px] font-semibold">{s.label}</p>
+                <p className="mt-0.5 text-[12.5px] text-muted">{s.note}</p>
+              </div>
+            </Reveal>
           ))}
-        </Reveal>
-        <p className="mt-4 text-right text-[12px] text-muted">
-          Live from the demo graph (Online Boutique v0.8.0). The 74% is measured by rehearsing the plan on a graph copy.
-        </p>
+        </div>
       </div>
     </section>
   );
@@ -728,29 +825,30 @@ function FeaturePanel() {
   const i = pick ?? auto;
   const f = FEATURES[i];
   return (
-    <section className="px-5 pt-28 sm:pt-36">
+    <section className="lp-band lp-band-grey">
       <div ref={ref} className="mx-auto max-w-[1160px]">
         <Reveal>
-          <h2 className="text-[38px] font-semibold leading-[1.08] tracking-[-0.03em] sm:text-[55px]">What Warden can do on your graph</h2>
+          <Eyebrow label="Features" />
+          <h2 className="text-[32px] font-semibold leading-[1.1] tracking-[-0.03em] sm:text-[46px]">What Warden can do on your graph</h2>
         </Reveal>
-        <Reveal delay={100} className="lp-glow mt-10 overflow-hidden rounded-[32px] border border-line bg-tint">
+        <Reveal delay={100} className="lp-card mt-6 overflow-hidden rounded-[28px]">
           <div className="grid gap-6 p-5 sm:p-10 lg:grid-cols-[360px_minmax(0,1fr)] lg:gap-10">
             <div className="flex flex-col gap-2">
-              <p className="rounded-2xl bg-bg/80 p-4 text-[15px] leading-[1.5] backdrop-blur">
+              <p className="rounded-2xl border border-line bg-code p-4 text-[15px] leading-[1.5]">
                 <span className="font-semibold">{f.name}.</span> <span className="text-ink/60">{f.text}</span>
               </p>
               {FEATURES.map((x, k) => (
                 <button
                   key={x.name}
                   onClick={() => setPick(k)}
-                  className={`relative flex items-center gap-3 overflow-hidden rounded-full px-4 py-3 text-left text-[15px] font-semibold transition-colors ${k === i ? "bg-ink text-white" : "bg-bg/60 text-ink/70 hover:bg-bg"}`}
+                  className={`relative flex items-center gap-3 overflow-hidden rounded-full px-4 py-3 text-left text-[15px] font-semibold transition-colors ${k === i ? "bg-ink text-white" : "border border-line text-ink/70 hover:border-ink"}`}
                 >
                   <x.icon size={17} /> {x.name}
                   {k === i && pick === null && <span key={auto} className="lp-fill absolute inset-x-0 bottom-0 h-[2px] bg-accent" style={{ ["--dur" as string]: "3.2s" }} />}
                 </button>
               ))}
             </div>
-            <div className="flex min-h-[320px] items-center justify-center rounded-[22px] bg-bg/70 p-5 backdrop-blur sm:p-8">
+            <div className="lp-glow flex min-h-[320px] items-center justify-center rounded-[22px] border border-line bg-tint p-5 sm:p-8">
               <FeatureMock key={i} i={i} />
             </div>
           </div>
@@ -850,9 +948,12 @@ function UnderTheHood({ data }: { data: PublicOverview | null | undefined }) {
   const typed = useTyped(CYPHER, seen, 140);
   const h = data?.health;
   return (
-    <section id="graph" className="scroll-mt-24 px-5 pt-28 sm:pt-36">
+    <section id="graph" className="lp-band scroll-mt-16">
+      <div className="mx-auto max-w-[1080px]">
+        <Eyebrow label="Under the hood" />
+      </div>
       <div ref={ref} className="mx-auto grid max-w-[1080px] gap-4 lg:grid-cols-2">
-        <Reveal className="flex flex-col justify-between gap-10 rounded-[28px] border border-line p-8 sm:p-10">
+        <Reveal className="lp-card flex flex-col justify-between gap-10 rounded-[28px] p-8 sm:p-10">
           <div>
             <p className="text-[34px] font-semibold leading-[1.1] tracking-[-0.03em] sm:text-[42px]">“The graph is the product. The agent just knows how to walk it.”</p>
             <p className="mt-5 text-[14px] text-muted">How Warden uses FalkorDB</p>
@@ -899,21 +1000,54 @@ function UnderTheHood({ data }: { data: PublicOverview | null | undefined }) {
 
 /* ───────────────────────────── End CTA + footer ───────────────────────────── */
 
+const NEXT_STEPS = [
+  { icon: Users, title: "Create an account", note: "Email and password, about 30 seconds." },
+  { icon: Network, title: "Land in the demo project", note: "A live FalkorDB graph of Online Boutique." },
+  { icon: MessageSquare, title: "Ask what to fix first", note: "Get the answer with the path that proves it." },
+  { icon: GitPullRequest, title: "Invite your team", note: "Share a link; everyone asks the same graph." },
+];
+
 function EndCta({ app, signedIn }: { app: string; signedIn: boolean }) {
   return (
-    <section className="px-5 pt-28 sm:pt-36">
-      <Reveal className="lp-glow mx-auto max-w-[1160px] overflow-hidden rounded-[32px] border border-line bg-tint px-6 py-20 text-center sm:py-28">
-        <h2 className="mx-auto max-w-[760px] text-[40px] font-semibold leading-[1.06] tracking-[-0.035em] sm:text-[64px]">Find the path. Fix it. Prove it.</h2>
-        <p className="mx-auto mt-5 max-w-[520px] text-[18px] font-semibold tracking-[-0.015em] text-ink/50">
-          Sign up and you land in a live demo project. <span className="text-ink">Invite your team with a link.</span>
-        </p>
-        <div className="mt-9 flex flex-wrap justify-center gap-3">
-          <Pill to={app} dark big>
-            {signedIn ? "Open Warden" : "Get started free"} <ArrowRight size={16} />
-          </Pill>
-          <Pill href="#how" big>
-            How it works
-          </Pill>
+    <section className="lp-band lp-band-grey">
+      <Reveal className="lp-card mx-auto grid max-w-[1160px] overflow-hidden rounded-[32px] lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
+        <div className="lp-glow flex flex-col justify-center bg-tint p-8 sm:p-12">
+          <Eyebrow label="Get started" />
+          <h2 className="text-[36px] font-semibold leading-[1.05] tracking-[-0.035em] sm:text-[52px]">
+            Find the path.
+            <br />
+            Fix it. Prove it.
+          </h2>
+          <p className="mt-4 max-w-[440px] text-[17px] font-semibold leading-[1.5] tracking-[-0.015em] text-ink/50">
+            No setup and no card. <span className="text-ink">You're asking a real graph within a minute.</span>
+          </p>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <Pill to={app} dark big>
+              {signedIn ? "Open Warden" : "Get started free"} <ArrowRight size={16} />
+            </Pill>
+            <Pill href="#how" big>
+              How it works
+            </Pill>
+          </div>
+        </div>
+        <div className="flex flex-col gap-2.5 border-t border-line bg-bg p-6 sm:p-10 lg:border-l lg:border-t-0">
+          <p className="mb-1 text-[13px] font-semibold text-muted">What happens next</p>
+          {NEXT_STEPS.map((x, k) => (
+            <div key={x.title} className="flex items-center gap-3.5 rounded-2xl border border-line p-3.5 transition-colors hover:border-ink">
+              <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${k === 0 ? "bg-ink text-white" : "bg-code text-ink"}`}>
+                <x.icon size={17} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-[14.5px] font-semibold">{x.title}</span>
+                <span className="block text-[13px] text-muted">{x.note}</span>
+              </span>
+              {k === 0 && <span className="hidden shrink-0 rounded-full bg-accent px-2.5 py-1 text-[11px] font-semibold text-white sm:inline">Start here</span>}
+            </div>
+          ))}
+          <div className="mt-2 flex items-center gap-2 rounded-xl bg-ink px-4 py-3 font-mono text-[12px] text-white/80">
+            <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+            <span className="truncate">or run it yourself: ./start.sh</span>
+          </div>
         </div>
       </Reveal>
     </section>
@@ -958,8 +1092,8 @@ function Footer({ app }: { app: (p: string) => string }) {
     },
   ];
   return (
-    <footer className="mt-28 overflow-hidden border-t border-line/60 bg-code/50 sm:mt-36">
-      <div className="mx-auto grid max-w-[1080px] grid-cols-2 gap-10 px-5 pt-16 md:grid-cols-4">
+    <footer className="overflow-hidden bg-bg">
+      <div className="mx-auto grid max-w-[1080px] grid-cols-2 gap-10 px-5 pt-14 md:grid-cols-4">
         {cols.map((c) => (
           <div key={c.title}>
             <p className="text-[14px] text-muted">{c.title}</p>
