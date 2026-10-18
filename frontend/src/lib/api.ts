@@ -66,6 +66,17 @@ export type HeroFacts = {
 
 export type BaselineRow = { vuln: string; service: string; package: string; severity: string; cvss: number | null; risk: number; tier: string; kev: boolean;
   epss: number | null; hops: number; data: string[]; baseline_rank: number; graph_rank: number; why: string[] };
+export type EvalSide = { answer: string; ok: boolean };
+export type EvalScenario = { id: string; title: string; category: string; status: "ran" | "error"; error?: string; expected?: string; warden?: EvalSide; baseline?: EvalSide;
+  queries?: number; ms?: number; checks?: { check: string; ok: boolean; level: string; detail: string }[] | null };
+export type EvalCount = { n: number; warden: number; baseline: number };
+export type EvalPr = { tp: number; fp: number; fn: number; precision: number | null; recall: number | null };
+export type EvalCard = {
+  at?: number; seconds?: number; scenarios: EvalScenario[]; pending: { id: string; title: string; expected: string; unlocks: string }[];
+  metrics: null | { reachability: { warden: EvalPr; baseline: EvalPr }; priority: EvalCount; gate: EvalCount; abstain: EvalCount; overall: EvalCount;
+    latency_ms: { queries: number; p50: number | null; p95: number | null } };
+  baseline_definition?: string; limitations?: string;
+};
 export type Baseline = {
   universe: number; n: number; overlap: number;
   method: { unit: string; baseline: string; kev_aware: string; graph: string };
@@ -321,6 +332,8 @@ export const api = {
   health: () => getJson<Health>("/api/health"),
   overview: () => getJson<Overview>("/api/overview"),
   baseline: () => getJson<Baseline>("/api/baseline"),
+  evalCard: () => getJson<EvalCard>("/api/eval"),
+  runEval: () => postJson<EvalCard>("/api/eval/run", {}),
   validateEvidence: (edges: string[]) => postJson<{ valid: boolean; checked: number; hops: { edge: string; present: boolean; type: string | null }[]; ms: number; graph: string; at: number }>("/api/evidence/validate", { edges }),
   tools: () => getJson<ToolMeta[]>("/api/tools"),
   mcp: () => getJson<McpStatus>("/api/mcp"),

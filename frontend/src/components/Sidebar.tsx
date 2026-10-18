@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
-import { Check, ChevronsUpDown, GitPullRequest, House, Inbox, LogOut, MessageSquare, PanelLeftClose, Plus, RefreshCw, Settings, Wrench } from "lucide-react";
+import { Check, ChevronsUpDown, GitPullRequest, House, Inbox, LogOut, MessageSquare, PanelLeftClose, Plus, ListChecks, RefreshCw, Settings, Wrench } from "lucide-react";
 import type { Health } from "../lib/api";
 import { useAuth, useProject } from "../lib/auth";
 import { Logo, StatusDot, usePendingCount } from "./Chrome";
@@ -126,6 +126,7 @@ const NAV = [
   { path: "/approvals", label: "Approvals", icon: Inbox },
   { path: "/tools", label: "Tools", icon: Wrench },
   { path: "/sync", label: "Sync", icon: RefreshCw },
+  { path: "/evaluation", label: "Evaluation", icon: ListChecks },
 ];
 
 /** Left rail like claude.ai: project, new chat, sections, recent items (passed in), account. */

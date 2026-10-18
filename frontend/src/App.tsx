@@ -9,6 +9,7 @@ import { Approvals } from "./screens/Approvals";
 import { PrImpact } from "./screens/PrImpact";
 import { Settings } from "./screens/Settings";
 import { Sync } from "./screens/Sync";
+import { Evaluation } from "./screens/Evaluation";
 import { Tools } from "./screens/Tools";
 
 export default function App() {
@@ -28,10 +29,11 @@ export default function App() {
             <Route path="approvals/:id?" element={<Approvals />} />
             <Route path="tools" element={<Tools />} />
             <Route path="sync" element={<Sync />} />
+            <Route path="evaluation" element={<Evaluation />} />
             <Route path="settings/:section?" element={<Settings />} />
             <Route path="*" element={<Navigate to="home" replace />} />
           </Route>
-          {["/home", "/ask", "/impact", "/approvals", "/tools", "/sync"].map((p) => (
+          {["/home", "/ask", "/impact", "/approvals", "/tools", "/sync", "/evaluation"].map((p) => (
             <Route key={p} path={p} element={<ToProject path={p} />} />
           ))}
           <Route path="*" element={<Navigate to="/" replace />} />
