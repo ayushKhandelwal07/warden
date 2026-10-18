@@ -50,13 +50,13 @@ export function TryIt({ onBuild, building }: { onBuild: () => void; building: bo
   return (
     <section className="rounded-card border border-line bg-bg" aria-label="Try it in 60 seconds">
       <header className="border-b border-line px-4 py-2.5">
-        <h2 className="text-[13px] font-semibold">Try it in 60 seconds</h2>
+        <h2 className="text-[15px] font-bold text-ink">Try it in 60 seconds</h2>
       </header>
       <ol className="grid gap-px bg-line sm:grid-cols-2 lg:grid-cols-4">
         {steps.map((s) => (
           <li key={s.n} className="flex flex-col gap-1.5 bg-bg px-4 py-3">
             <span className="flex items-center gap-2 text-[13px] font-semibold">
-              <span className="flex h-5 w-5 items-center justify-center rounded-full border border-ink text-[11px]">{s.n}</span>
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-ink text-[11px] text-white">{s.n}</span>
               {s.title}
             </span>
             <span className="text-[12px] text-muted">{s.body}</span>

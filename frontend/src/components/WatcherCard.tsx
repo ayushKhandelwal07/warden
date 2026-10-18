@@ -13,7 +13,7 @@ function ago(ms: number | null) {
 }
 
 /** The autonomous watcher: on/off, a manual check, a one-click real change on the fork, and what it did on its own. */
-export function WatcherCard({ onChange }: { onChange?: () => void }) {
+export function WatcherCard({ onChange, embedded }: { onChange?: () => void; embedded?: boolean }) {
   const { to } = useProject();
   const [snap, setSnap] = useState<WatchSnapshot | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -46,7 +46,7 @@ export function WatcherCard({ onChange }: { onChange?: () => void }) {
   const st = snap?.state;
   const off = !!snap && !snap.github;
   return (
-    <section className="rounded-window border border-line">
+    <section className={embedded ? "" : "rounded-window border border-line"}>
       <div className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3">
         <Eye size={16} className={st?.enabled ? "text-accent" : "text-muted"} />
         <div className="min-w-0 flex-1">

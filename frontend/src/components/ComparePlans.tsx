@@ -17,7 +17,7 @@ function Verdict({ r }: { r: PlanRow }) {
 }
 
 /** Constrained candidate plans, each rehearsed on its own graph copy. Pick one to file it for approval. */
-export function ComparePlans({ onFiled }: { onFiled: (blocked: string | null) => void }) {
+export function ComparePlans({ onFiled, embedded }: { onFiled: (blocked: string | null) => void; embedded?: boolean }) {
   const [cons, setCons] = useState<PlanConstraints>({ max_changes: 5, no_major: false, frozen_services: [] });
   const [frozen, setFrozen] = useState("");
   const [s, setS] = useState<{ busy: boolean; data?: PlanCompare; error?: string; filing?: string }>({ busy: false });
@@ -38,10 +38,10 @@ export function ComparePlans({ onFiled }: { onFiled: (blocked: string | null) =>
   const win = rows.find((r) => r.shared_win)?.shared_win;
 
   return (
-    <section className="overflow-hidden rounded-card border border-line bg-bg">
+    <section className={embedded ? "bg-bg" : "overflow-hidden rounded-card border border-line bg-bg"}>
       <header className="flex flex-wrap items-end gap-x-5 gap-y-3 border-b border-line px-4 py-3">
         <div className="min-w-0 flex-1 basis-[260px]">
-          <h3 className="text-[14px] font-semibold">Compare plans</h3>
+          {!embedded && <h3 className="text-[14px] font-semibold">Compare plans</h3>}
           <p className="text-[12px] text-muted">Four strategies under your constraints, each rehearsed on its own copy of the graph.</p>
         </div>
         <label className="flex flex-col gap-1 text-[12px] text-muted">

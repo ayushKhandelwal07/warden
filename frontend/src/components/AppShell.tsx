@@ -129,12 +129,12 @@ export function AppShell() {
 }
 
 /** Old flat URLs (/ask, /approvals…) land in the user's last project. */
-export function ToProject({ path }: { path: string }) {
+export function ToProject({ path }: { path?: string }) {
   const { me, loading, offline } = useAuth();
   const loc = useLocation();
   if (loading) return <Splash />;
   if (offline) return <Offline />;
   if (!me) return <Navigate to="/login" replace />;
   const p = defaultProject(me);
-  return <Navigate to={p ? `/app/${p.slug}${path}${loc.search}` : "/"} replace />;
+  return <Navigate to={p ? `/app/${p.slug}${path ?? loc.pathname}${loc.search}` : "/"} replace />;
 }

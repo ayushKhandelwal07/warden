@@ -36,6 +36,9 @@ export default function App() {
           {["/home", "/ask", "/impact", "/approvals", "/tools", "/sync", "/evaluation"].map((p) => (
             <Route key={p} path={p} element={<ToProject path={p} />} />
           ))}
+          {["/approvals/:id", "/impact/:id", "/ask/:id"].map((p) => (
+            <Route key={p} path={p} element={<ToProject />} />
+          ))}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

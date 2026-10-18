@@ -25,7 +25,7 @@ function Row({ c }: { c: Contradiction }) {
 }
 
 /** Where two of our own sources disagree. Plans that touch these abstain until they are resolved. */
-export function ContradictionsPanel() {
+export function ContradictionsPanel({ embedded }: { embedded?: boolean }) {
   const { items, loading } = useContradictions();
   const [st, setSt] = useState<{ busy: boolean; checked?: Record<string, number>; error?: string }>({ busy: false });
   const scan = () => {
@@ -40,10 +40,10 @@ export function ContradictionsPanel() {
   };
   const total = st.checked ? Object.values(st.checked).reduce((a, b) => a + b, 0) : null;
   return (
-    <section className="overflow-hidden rounded-card border border-line bg-bg">
+    <section className={embedded ? "bg-bg" : "overflow-hidden rounded-card border border-line bg-bg"}>
       <header className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-line px-4 py-3">
         <div className="min-w-0 flex-1">
-          <h3 className="text-[14px] font-semibold">Evidence contradictions · {loading ? "…" : items.length}</h3>
+          <h3 className="text-[14px] font-semibold">{embedded ? `${loading ? "…" : items.length} open` : `Evidence contradictions · ${loading ? "…" : items.length}`}</h3>
           <p className="text-[12px] text-muted">Places where our own sources disagree. A fix that depends on a disputed fact is blocked, not guessed.</p>
         </div>
         <button onClick={scan} disabled={st.busy} className="inline-flex h-8 items-center gap-1.5 rounded-full border border-line px-3 text-[12.5px] font-medium hover:bg-code/60 disabled:opacity-40">

@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useProject } from "../lib/auth";
-import { ArrowRight, ArrowUp, RotateCw, Wrench } from "lucide-react";
+import { ArrowRight, RotateCw, Wrench } from "lucide-react";
 import { api, notifyApprovalsChanged, type Approval, type Overview } from "../lib/api";
 import { useApi } from "../lib/useApi";
 import { Accordion } from "../components/Accordion";
@@ -99,7 +99,6 @@ export function Home() {
   const ov = useApi(api.overview);
   const apr = useApi(api.approvals);
   const base = useApi(api.baseline);
-  const [q, setQ] = useState("");
   const [plan, setPlan] = useState<{ busy: boolean; error?: string }>({ busy: false });
   const [unsafe, setUnsafe] = useState<{ busy: boolean; plan?: Awaited<ReturnType<typeof api.unsafePlan>>; error?: string }>({ busy: false });
 
@@ -132,30 +131,19 @@ export function Home() {
       <section className="mx-auto flex w-full max-w-[720px] flex-col items-center gap-6 text-center">
         <div>
           <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.02em] sm:text-[40px]">
-            {t.kev === 1 ? "1 advisory" : `${t.kev} advisories`} on CISA KEV, reachable from the front door.
+            {t.vulnerabilities} alerts. {t.kev === 1 ? "1 attack path" : `${t.kev} attack paths`} that matter{t.kev === 1 ? "s" : ""}.
           </h1>
           <p className="mt-2 text-muted">
             {t.reachable_vulnerabilities} of {t.vulnerabilities} advisories are graph-reachable under the current topology model, but only {ov.data.funnel.stages.find((s) => s.key === "signal")?.n ?? "a few"} carry an exploit signal and {t.kev} {t.kev === 1 ? "is" : "are"} on CISA KEV.
           </p>
         </div>
-        <form
-          className="flex w-full items-center gap-2 rounded-full border border-line bg-bg p-2 pl-6 focus-within:border-ink"
-          onSubmit={(e) => {
-            e.preventDefault();
-            nav(to(q.trim() ? `/ask?q=${encodeURIComponent(q.trim())}` : "/ask"));
-          }}
-        >
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ask Warden: what should we fix first?" className="h-12 min-w-0 flex-1 bg-transparent text-[16px] outline-none placeholder:text-muted" aria-label="Ask Warden" />
-          <button className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-ink text-white hover:opacity-85" aria-label="Ask">
-            <ArrowUp size={19} />
-          </button>
-        </form>
-        <div className="flex flex-wrap justify-center gap-2">
-          {["What should we fix first?", "What breaks if paymentservice goes down?", "Who should review a change to checkoutservice?"].map((s) => (
-            <button key={s} onClick={() => nav(to(`/ask?q=${encodeURIComponent(s)}`))} className="rounded-full border border-line px-3.5 py-1.5 text-small text-muted hover:border-ink hover:text-ink">
-              {s}
-            </button>
-          ))}
+        <div className="flex flex-wrap justify-center gap-3">
+          <Link to={to("/ask?q=What%20should%20we%20fix%20first%3F")} className="inline-flex h-12 items-center gap-2 rounded-full bg-ink px-6 text-[15px] font-semibold text-white hover:opacity-85">
+            Ask what to fix first <ArrowRight size={16} />
+          </Link>
+          <Link to={to("/ask")} className="inline-flex h-12 items-center rounded-full border border-line px-6 text-[15px] font-semibold hover:border-ink">
+            Ask something else
+          </Link>
         </div>
       </section>
 
@@ -174,13 +162,13 @@ export function Home() {
       )}
 
       <div>
-        <h2 className="mb-3 text-small font-semibold">Where the numbers come from</h2>
+        <h2 className="mb-3 text-[18px] font-bold tracking-[-0.01em] text-ink">Where the numbers come from</h2>
         <Funnel data={ov.data.funnel} />
       </div>
 
       {base.data && (
         <div>
-          <h2 className="mb-3 text-small font-semibold">What the graph changes</h2>
+          <h2 className="mb-3 text-[18px] font-bold tracking-[-0.01em] text-ink">What the graph changes</h2>
           <BaselineCompare data={base.data} />
         </div>
       )}
@@ -188,11 +176,12 @@ export function Home() {
       <ChokePoints />
 
       <Accordion title="Evidence contradictions" hint="Where our own sources disagree. Plans that depend on a disputed fact are blocked.">
-        <ContradictionsPanel />
+        <ContradictionsPanel embedded />
       </Accordion>
 
       <Accordion title="Compare fix plans" hint="Four strategies under your constraints, each rehearsed on its own graph copy.">
         <ComparePlans
+          embedded
           onFiled={(blocked) => {
             notifyApprovalsChanged();
             if (blocked) setPlan({ busy: false, error: blocked });
@@ -208,9 +197,10 @@ export function Home() {
         <Tile label="Fixes opened" value={opened} sub="PRs and comments" to="/approvals" />
       </div>
 
-      <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
         <Accordion title="Watcher" hint="Re-reads the fork when it changes and proposes fixes on its own.">
           <WatcherCard
+            embedded
             onChange={() => {
               ov.reload();
               apr.reload();
@@ -220,7 +210,7 @@ export function Home() {
         <div className="flex flex-col gap-6">
           <section className="rounded-card border border-line p-4">
             <div className="mb-1 flex items-center justify-between">
-              <h2 className="text-small font-medium">Recent activity</h2>
+              <h2 className="text-[15px] font-bold text-ink">Recent activity</h2>
               <Link to={to("/approvals")} className="inline-flex items-center gap-1 text-[12px] text-muted hover:text-ink">
                 All <ArrowRight size={12} />
               </Link>
@@ -229,7 +219,7 @@ export function Home() {
           </section>
           <section id="fix" className="flex scroll-mt-24 flex-col justify-between gap-3 rounded-card border border-line p-4">
             <div>
-              <h2 className="text-small font-medium">Fix it</h2>
+              <h2 className="text-[15px] font-bold text-ink">Fix it</h2>
               <p className="mt-1 text-small text-muted">Best 5 upgrades, rehearsed on a graph copy, filed for your approval.</p>
             </div>
             <Button variant="primary" icon={<Wrench size={16} />} onClick={build} disabled={plan.busy}>
