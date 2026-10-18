@@ -11,12 +11,21 @@
 import time
 import uuid
 
-from warden import config
+from warden import config, regression
+from warden.actions import patches
+from warden.graph.evidence import Evidence
 from warden.graph.client import copy_graph, delete_graph, unwind
 from warden.ingest import intel, load, osv
 from warden.ingest.common import version_key
 from warden.tools.base import Trace
-from warden.tools.security import best_findings, scored_paths
+from warden.tools.security import FINDING_PATH_CYPHER, _attach_context, best_findings, scored_paths
+
+
+# The same service on the upgraded package (the advisory edge is gone once the fix works).
+UPGRADED_PATH_CYPHER = """
+MATCH p = (:Internet)-[:REACHES]->(:Ingress)<-[:EXPOSED_VIA]-(:Service)-[:CALLS*0..4]->(s:Service {name: $service})
+      -[:DEPENDS_ON]->(:Package {key: $key})
+RETURN p ORDER BY length(p) ASC LIMIT 1"""
 
 
 def _target_version(ecosystem: str, name: str, fixed: str) -> str:
@@ -83,7 +92,7 @@ def _summary_numbers(paths: list[dict]) -> dict:
     }
 
 
-def rehearse(chosen: list[dict], graph_name: str | None = None) -> dict:
+def rehearse(chosen: list[dict], graph_name: str | None = None, probe=None) -> dict:
     live = graph_name or config.org_graph_name()
     copy = f"{live}_rehearsal_{uuid.uuid4().hex[:8]}"
     t0 = time.perf_counter()
@@ -108,31 +117,79 @@ def rehearse(chosen: list[dict], graph_name: str | None = None) -> dict:
         load.load_vulnerabilities(fresh, run=0, g=copy)
         after_paths = scored_paths(Trace(), graph_name=copy)
         new_advisories = sorted({a["vuln"] for a in fresh["affected"]})
+        probed = probe(copy, after_paths) if probe else None  # read from the copy before it is deleted
     finally:
         delete_graph(copy)
-    return {"graph": copy, "after_paths": after_paths, "new_advisories": new_advisories, "ms": round((time.perf_counter() - t0) * 1000)}
+    return {"graph": copy, "after_paths": after_paths, "new_advisories": new_advisories, "probe": probed, "ms": round((time.perf_counter() - t0) * 1000)}
 
 
-def _gate(before: dict, after: dict, added: list[tuple]) -> dict:
-    """Rehearsal gate: a fix is only proposed if the graph copy *proves* it helps and breaks nothing new."""
+def _check(name: str, ok: bool, detail: str, level: str = "block") -> dict:
+    """level: block = a failure stops the plan · warn = needs a human's attention · info = shown for context."""
+    return {"check": name, "ok": ok, "detail": detail, "level": level}
+
+
+def _gate(before: dict, after: dict, added: list[tuple], reg: dict | None = None, items: list[dict] | None = None) -> dict:
+    """Deterministic gate: a fix is only proposed if the graph copy *proves* it helps and creates no new exposure.
+    No language model is involved; the LLM cannot talk its way past this."""
+    empty = {"before": 0, "after": 0, "removed": [], "remaining": [], "new": []}
+    reg = reg or {"kev": empty, "sensitive": empty, "data": empty}
+    items = items or []
     new_bad = [(v, s) for v, s in added if after["by_key"][(v, s)]["kev"] or after["by_key"][(v, s)]["severity"] == "CRITICAL"]
+    kev, sens, data = reg["kev"], reg["sensitive"], reg["data"]
+    new_services = sorted({s for _, s in after.get("keys", set())} - {s for _, s in before.get("keys", set())})
+    majors = [f"{i['package']} {i['from']} → {i['to']}" for i in items if patches.major_bump(i["from"], i["to"])]
+    serious_new = [r for r in sens["new"] if r["severity"] in ("HIGH", "CRITICAL") or r["kev"] or r["tier"] == "exploit_signal"]
+    minor_new = [r for r in sens["new"] if r not in serious_new]
+    left = sorted(after.get("by_key", {}).values(), key=lambda f: -f.get("risk", 0))[:3]
     checks = [
-        {"check": "total risk drops", "ok": after["risk"] < before["risk"], "detail": f"{round(before['risk'])} → {round(after['risk'])}"},
-        {"check": "KEV findings eliminated or reduced", "ok": after["kev_findings"] == 0 or after["kev_findings"] < before["kev_findings"],
-         "detail": f"{before['kev_findings']} → {after['kev_findings']}"},
-        {"check": "no new critical or KEV finding", "ok": not new_bad, "detail": ", ".join(f"{v} on {s}" for v, s in new_bad) or "none"},
+        _check("total risk drops", after["risk"] < before["risk"], f"{round(before['risk'])} → {round(after['risk'])}"),
+        _check("KEV exposures eliminated or reduced", after["kev_findings"] == 0 or after["kev_findings"] < before["kev_findings"],
+               f"{before['kev_findings']} → {after['kev_findings']} ({len(kev['removed'])} of {kev['before']} removed)"),
+        _check("no new critical or KEV exposure", not new_bad, ", ".join(f"{v} on {s}" for v, s in new_bad) or "none"),
+        _check("no new high-severity or exploit-signal exposure of PCI/PII data", not serious_new,
+               ", ".join(f"{r['vuln']} in {r['service']} ({r['severity']})" for r in serious_new) or f"{len(data['remaining'])} service-data pairs stay exposed, none added"),
+        _check("no service newly exposed to a vulnerability", not new_services, ", ".join(new_services) or "none"),
+        _check("no new lower-severity exposure of PCI/PII data", not minor_new,
+               ", ".join(f"{r['vuln']} in {r['service']} ({r['severity']})" for r in minor_new) or "none", level="warn"),
+        _check("no major-version jump", not majors, "; ".join(majors) or "none", level="warn"),
+        _check("residual KEV exposure", not kev["remaining"], ", ".join(f"{r['vuln']} in {r['service']}" for r in kev["remaining"]) or "none", level="warn"),
+        _check("highest remaining exposures", True, "; ".join(f"{f.get('vuln', '?')} in {f.get('service', '?')} (risk {f.get('risk', 0)})" for f in left) or "none", level="info"),
     ]
-    return {"passed": all(c["ok"] for c in checks), "checks": checks}
+    return {"passed": all(c["ok"] for c in checks if c["level"] == "block"), "checks": checks}
 
 
-def build_plan(max_fixes: int = 5, graph_name: str | None = None) -> dict:
+def build_plan(max_fixes: int = 5, graph_name: str | None = None, chosen_override: list[dict] | None = None) -> dict:
     trace = Trace()
     before_paths = scored_paths(trace, graph_name=graph_name)
-    chosen = choose(before_paths, max_fixes)
+    chosen = chosen_override if chosen_override is not None else choose(before_paths, max_fixes)
     if not chosen:
         return {"items": [], "summary": "No reachable vulnerability has a published fix: there is nothing to upgrade.", "before": None, "after": None}
-    reh = rehearse(chosen, graph_name)
+    before_findings = best_findings(before_paths)
+    assets = regression.sensitive_assets(trace, graph_name)
+    hero = next((f for f in before_findings if f["kev"]), before_findings[0] if before_findings else None)
+    hero_item = next((c for c in chosen if hero and any(p["vuln"] == hero["vuln"] and p["service"] == hero["service"] for p in c["removable"])), None)
+
+    def probe(copy, after_paths):
+        # The headline path in the rehearsal copy: the same service, now on the upgraded package.
+        if not hero_item:
+            return None
+        key = f"{hero_item['ecosystem']}:{hero_item['package']}@{hero_item['to_version']}"
+        rows = Trace().ro(UPGRADED_PATH_CYPHER, {"service": hero["service"], "key": key}, copy)
+        still = (hero["vuln"], hero["service"]) in {(f["vuln"], f["service"]) for f in best_findings(after_paths)}
+        return {"after_evidence": Evidence().add_path(rows[0]["p"]).to_json() if rows else None, "still_exposed": still, "package_after": key}
+
+    reh = rehearse(chosen, graph_name, probe)
     before, after = _summary_numbers(before_paths), _summary_numbers(reh["after_paths"])
+    reg = regression.classify(regression.invariants(before_findings, assets), regression.invariants(best_findings(reh["after_paths"]), assets))
+    proof = None
+    if hero_item:
+        prow = trace.ro(FINDING_PATH_CYPHER, {"service": hero["service"], "package_key": hero["package_key"], "vuln": hero["vuln"]}, graph_name)
+        if prow:
+            ev = Evidence().add_path(prow[0]["p"])
+            _attach_context(trace, ev, hero["vuln"], hero["service"], len(prow[0]["p"].nodes()) - 1, graph_name)
+            pr = reh["probe"] or {}
+            proof = {"vuln": hero["vuln"], "service": hero["service"], "kev": hero["kev"], "package_before": hero["package"], "package_after": pr.get("package_after"),
+                     "before": ev.to_json(), "after": pr.get("after_evidence"), "removed": not pr.get("still_exposed", True)}
     removed = sorted(before["keys"] - after["keys"])
     added = sorted(after["keys"] - before["keys"])
     owners = {
@@ -151,11 +208,11 @@ def build_plan(max_fixes: int = 5, graph_name: str | None = None) -> dict:
                 "changes": sorted({(p["service"], p["manifest"], p["direct"]) for p in c["removable"]}),
             }
         )
-    gate = _gate(before, after, added)
+    gate = _gate(before, after, added, reg, items)
     pct = 0 if not before["risk"] else round(100 * (before["risk"] - after["risk"]) / before["risk"])
     kev_left = after["kev_findings"]
     summary = (
-        f"{len(items)} upgrade{'s' if len(items) != 1 else ''} remove {len(removed)} of {before['findings']} reachable findings "
+        f"{len(items)} upgrade{'s' if len(items) != 1 else ''} remove {len(removed)} of {before['findings']} graph-reachable exposures (advisory × service) "
         f"({pct}% of total risk){', including every CISA KEV path' if before['kev_findings'] and not kev_left else ''}. "
         f"Measured by rehearsing on a copy of the graph, not estimated."
     )
@@ -163,6 +220,8 @@ def build_plan(max_fixes: int = 5, graph_name: str | None = None) -> dict:
     return {
         "summary": summary,
         "gate": gate,
+        "regression": reg,
+        "proof": proof,
         "items": items,
         "before": strip(before),
         "after": strip(after),
@@ -172,3 +231,21 @@ def build_plan(max_fixes: int = 5, graph_name: str | None = None) -> dict:
         "rehearsal": {"graph": reh["graph"], "ms": reh["ms"], "deleted": True},
         "queries": trace.queries,
     }
+
+
+UNSAFE_PIN = "v0.9.0"
+
+
+def unsafe_demo(graph_name: str | None = None) -> dict:
+    """A deliberately bad plan, rehearsed for real: pin the KEV-affected golang.org/x/net to an older release.
+    It exists to show the deterministic gate blocking a fix that does not remove the path (and may add exposure)."""
+    paths = scored_paths(Trace(), graph_name=graph_name)
+    kev = next((p for p in best_findings(paths) if p["kev"]), None)
+    if not kev:
+        return {"items": [], "summary": "No KEV exposure to demonstrate with.", "gate": {"passed": True, "checks": []}}
+    bad = {"package_key": kev["package_key"], "package": kev["package_name"], "ecosystem": kev["ecosystem"], "from": kev["version"],
+           "to": UNSAFE_PIN, "to_version": UNSAFE_PIN, "removable": [], "fixes": set(), "paths": [kev],
+           "reason": "Deliberately unsafe: pins to an older release that still carries the advisory", "risk_removed": 0.0}
+    plan = build_plan(1, graph_name, chosen_override=[bad])
+    plan["unsafe_demo"] = True
+    return plan

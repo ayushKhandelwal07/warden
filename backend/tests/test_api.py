@@ -217,3 +217,77 @@ def test_new_project_gets_its_own_graph_and_isolation():
     assert client.post("/api/projects", json={"org_id": "demo", "name": "x"}).status_code == 403
     assert owner_c.delete(f"/api/projects/{p['id']}").status_code == 200
     assert not graph_exists(p["graph"])
+
+
+@live
+def test_funnel_numbers_equal_their_own_cypher_and_are_consistent():
+    from warden.graph.client import ro
+
+    f = client.get("/api/metrics").json()
+    for st in f["stages"] + f["instances"]:
+        assert ro(st["cypher"])[0][0]["n"] == st["n"], st["key"]  # the shown number is what the shown query returns
+        assert st["definition"] and st["unit"]
+    by = {s["key"]: s["n"] for s in f["stages"] + f["instances"]}
+    # overlapping filters over the same 256 advisories: each is a subset of the previous bound
+    assert by["present"] >= by["reachable"] >= by["signal"] >= by["kev"] >= 1
+    assert by["entry"] <= by["reachable"]
+    # one KEV advisory in several services is several exposures
+    assert by["kev_exposures"] >= by["kev"] and by["exposures"] >= by["reachable"]
+    assert f["snapshot"]["ingest"]["sha"] and f["snapshot"]["kev_catalog"]["version"]
+    assert client.get("/api/overview").json()["funnel"]["stages"][0]["n"] == by["present"]
+
+
+@live
+def test_path_validation_rechecks_each_hop_in_the_graph():
+    hero = client.get("/api/overview").json()["hero"]["evidence"]
+    ids = [e["id"] for e in hero["edges"]]
+    ok_ = client.post("/api/evidence/validate", json={"edges": ids}).json()
+    assert ok_["valid"] and ok_["checked"] == len(ids)
+    bad = client.post("/api/evidence/validate", json={"edges": ids + ["e99999999"]}).json()
+    assert not bad["valid"] and [h for h in bad["hops"] if not h["present"]][0]["edge"] == "e99999999"
+    assert client.post("/api/evidence/validate", json={}).status_code == 400
+
+
+@live
+def test_unsafe_demo_plan_is_blocked_by_the_gate_and_never_filed():
+    before = len(client.get("/api/approvals").json())
+    plan = client.post("/api/plans/unsafe").json()
+    assert plan["unsafe_demo"] and not plan["gate"]["passed"]
+    failed = {c["check"] for c in plan["gate"]["checks"] if not c["ok"] and c["level"] == "block"}
+    assert {"total risk drops", "KEV exposures eliminated or reduced"} <= failed
+    assert len(client.get("/api/approvals").json()) == before
+
+
+def _f(vuln, service, cvss, risk, kev=False, severity="HIGH", hops=0, tier="exposed", data=()):
+    return {"vuln": vuln, "service": service, "cvss": cvss, "risk": risk, "kev": kev, "severity": severity, "hops": hops, "tier": tier,
+            "epss": 0.01, "package": "p@1", "data": list(data), "data_weight": 0, "factors": {"exposure": 0.5 ** hops}}
+
+
+def test_baseline_ranks_the_same_universe_two_ways_and_is_deterministic():
+    from warden.baseline import compare
+
+    fs = [_f("A", "s1", 9.8, 2.0, hops=2), _f("B", "s2", 9.8, 1.0, hops=3), _f("C", "frontend", 6.9, 48.0, kev=True, tier="exploit_signal"),
+          _f("D", "s3", 7.0, 3.0, hops=1)]
+    c = compare(fs, n=2)
+    assert c["universe"] == 4
+    assert [r["vuln"] for r in c["baseline_top"]] == ["A", "B"]  # CVSS desc, ties by advisory id
+    assert [r["vuln"] for r in c["graph_top"]] == ["C", "D"]  # risk desc
+    assert c["overlap"] == 0 and [r["vuln"] for r in c["kev_aware"]["top"]] == ["C", "A"]
+    assert c["kev_positions"][0]["baseline_rank"] == 4 and c["kev_positions"][0]["graph_rank"] == 1
+    h = c["headline"]  # C (6.9) vs D (7.0): within 1 CVSS point, the graph ranks C 16x higher
+    assert (h["scanner_pick"]["vuln"], h["graph_pick"]["vuln"]) == ("D", "C") and h["risk_ratio"] >= 2
+    assert compare(fs, n=2) == c
+
+
+@live
+def test_baseline_endpoint_on_the_real_graph_is_internally_consistent():
+    c = client.get("/api/baseline").json()
+    f = client.get("/api/metrics").json()
+    exposures = next(s["n"] for s in f["instances"] if s["key"] == "exposures")
+    assert c["universe"] == exposures  # same universe as the funnel's exposure count
+    cvss = [r["cvss"] for r in c["baseline_top"]]
+    assert cvss == sorted(cvss, reverse=True)
+    risk = [r["risk"] for r in c["graph_top"]]
+    assert risk == sorted(risk, reverse=True)
+    assert 0 <= c["overlap"] <= c["n"] and c["kev_positions"], "the KEV exposures are tracked in both rankings"
+    assert all(1 <= r["baseline_rank"] <= c["universe"] and 1 <= r["graph_rank"] <= c["universe"] for r in c["kev_positions"])

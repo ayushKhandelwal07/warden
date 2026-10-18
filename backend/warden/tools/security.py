@@ -2,7 +2,7 @@
 from warden.graph.evidence import Evidence
 from warden.tools.base import Param, Result, ToolError, Trace, tool
 from warden.tools.common import resolve_service, resolve_vulnerability
-from warden.tools.risk import risk_factors
+from warden.tools.risk import TIER_ASSUMPTION, risk_factors, tier_of
 
 SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"]
 
@@ -56,8 +56,11 @@ def scored_paths(trace: Trace, severities=SEVERITIES, service=None, graph_name=N
                 "cvss": r["cvss"], "service": r["service"], "hops": r["hops"],
                 "package": f"{r['package']}@{str(r['version']).lstrip('v')}", "package_key": r["package_key"],
                 "package_name": r["package"], "version": r["version"], "ecosystem": r["ecosystem"], "direct": r["direct"],
-                "manifest": r["manifest"], "fixed": r["fixed"], "data": r["data"], "driver": f["driver"],
+                "manifest": r["manifest"], "fixed": r["fixed"], "data": r["data"], "data_weight": r["data_weight"], "driver": f["driver"],
                 "factors": f["factors"], "summary": r["summary"],
+                "tier": tier_of(bool(r["kev"]), r["epss"]),
+                # The entry service's own dependencies are sourced from lockfiles; deeper hops rely on inferred CALLS edges.
+                "confidence": "sourced" if r["hops"] == 0 else "inferred",
             }
         )
     return out
@@ -113,17 +116,20 @@ WHERE ($service IS NULL OR s.name = $service) AND v.severity IN $severities RETU
         )[0]["n"]
         summary = (
             f"No path in the graph: none of the {known} known {'/'.join(severities)} vulnerabilities{scope} "
-            "can be reached from the internet."
+            "are graph-reachable from the internet-facing service."
         )
     else:
         top = findings[0]
-        intel = "on CISA KEV" if top["kev"] else f"EPSS {(top['epss'] or 0):.1%}"
+        intel = "on CISA KEV (known exploitation reported)" if top["kev"] else f"EPSS {(top['epss'] or 0):.1%} (a likelihood estimate)"
+        signal = len({f["vuln"] for f in findings if f["tier"] == "exploit_signal"})
         summary = (
-            f"{len(reachable_vulns)} of {total} known vulnerabilities{scope} are reachable from the internet. "
+            f"{len(reachable_vulns)} of {total} known advisories{scope} are graph-reachable from the internet-facing service "
+            f"under the current topology model; {signal} of them carry an exploit signal (CISA KEV or EPSS of 10% or more). "
             f"Highest risk: {top['vuln']} in {top['package']} on {top['service']} "
-            f"({intel}, {top['hops']} hop(s) from the internet), risk {top['risk']}, driven by {top['driver']}."
+            f"({intel}, {top['hops']} hop(s) from the internet), tier {top['tier']}, risk {top['risk']}, driven by {top['driver']}. "
+            f"Assumption: {TIER_ASSUMPTION}"
         )
-    cols = ["risk", "vuln", "kev", "severity", "service", "hops", "package", "fixed", "driver"]
+    cols = ["risk", "tier", "vuln", "kev", "severity", "service", "hops", "package", "fixed", "driver"]
     return Result(summary, findings[:limit], cols, ev, sources=[f"https://osv.dev/vulnerability/{f['vuln']}" for f in findings[:3]])
 
 

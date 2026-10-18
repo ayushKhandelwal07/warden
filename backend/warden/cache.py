@@ -5,7 +5,9 @@ import json
 
 from warden import config
 
-TTL = 600  # seconds; versioning does the invalidation, the TTL only bounds memory
+# Bump when the shape of a cached result changes (the graph version only tracks data, not code).
+SCHEMA = 2
+TTL = 600 # seconds; versioning does the invalidation, the TTL only bounds memory
 PREFIX = "warden:cache"
 
 
@@ -32,7 +34,7 @@ def bump(graph: str):
 
 def _key(kind: str, graph: str, ver: int, payload) -> str:
     h = hashlib.sha1(json.dumps(payload, sort_keys=True, default=str).encode()).hexdigest()[:20]
-    return f"{PREFIX}:{kind}:{graph}:{ver}:{h}"
+    return f"{PREFIX}:{kind}:{graph}:{SCHEMA}:{ver}:{h}"
 
 
 def cached(kind: str, payload, compute, graph: str | None = None):

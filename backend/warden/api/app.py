@@ -128,6 +128,15 @@ def create_plan(body: dict = Body(default_factory=dict)):
         return JSONResponse(status_code=503, content={"error": f"{type(e).__name__}: {str(e)[:200]}"})
 
 
+@app.post("/api/plans/unsafe")
+def unsafe_plan():
+    """Rehearses a deliberately bad plan to show the gate blocking it. Never filed for approval."""
+    try:
+        return planner.unsafe_demo()
+    except Exception as e:
+        return JSONResponse(status_code=503, content={"error": f"{type(e).__name__}: {str(e)[:200]}"})
+
+
 @app.post("/api/impact")
 def pr_impact(body: dict = Body(default_factory=dict)):
     """Impact report for a PR. History PRs: report only. Fork PRs: report + a pending approval to post it."""
@@ -403,7 +412,7 @@ def public_overview():
         return hit[1]
     token = config.CURRENT_GRAPH.set(None)  # the demo graph, whoever is asking
     try:
-        body = {"totals": overview.totals(), "hero": overview.kev_hero(), "health": overview.health()}
+        body = {"totals": overview.totals(), "hero": overview.kev_hero(), "health": overview.health(), "funnel": overview.funnel(), "baseline": __import__("warden.baseline", fromlist=["compare"]).compare()}
     except Exception as e:
         return JSONResponse(status_code=503, content={"error": str(e)[:200]})
     finally:
@@ -412,12 +421,55 @@ def public_overview():
     return body
 
 
+@app.post("/api/evidence/validate")
+def validate_evidence(body: dict = Body(default_factory=dict)):
+    """Re-checks, read-only, that every hop of a shown path still exists in the current graph."""
+    raw = body.get("edges") or []
+    ids = [int(str(x).lstrip("e")) for x in raw if str(x).lstrip("e").isdigit()][:60]
+    if not ids:
+        return JSONResponse(status_code=400, content={"error": "Give the edge ids of the path."})
+    try:
+        from warden.graph.client import ro
+
+        rows, ms = ro("MATCH (a)-[e]->(b) WHERE id(e) IN $ids RETURN id(e) AS id, type(e) AS type, e.run AS run", {"ids": ids})
+    except Exception as e:
+        return JSONResponse(status_code=503, content={"error": str(e)[:200]})
+    found = {f"e{r['id']}": r for r in rows}
+    hops = [{"edge": f"e{i}", "present": f"e{i}" in found, "type": found.get(f"e{i}", {}).get("type")} for i in ids]
+    return {"valid": all(h["present"] for h in hops), "checked": len(hops), "hops": hops, "ms": ms,
+            "graph": config.org_graph_name(), "at": int(time.time() * 1000)}
+
+
+@app.get("/api/baseline")
+def get_baseline():
+    """Severity-only (and KEV-aware) ranking vs Warden's graph ranking over the same exposures and snapshot."""
+    try:
+        from warden import baseline, cache
+
+        body, _hit = cache.cached("baseline", {}, baseline.compare)
+        return body
+    except Exception as e:
+        return JSONResponse(status_code=503, content={"error": str(e)[:200]})
+
+
+@app.get("/api/metrics")
+def get_metrics():
+    """Every headline number with its unit, definition, Cypher and the snapshot it describes."""
+    try:
+        from warden import cache
+
+        body, _hit = cache.cached("funnel", {}, overview.funnel)
+        return body
+    except Exception as e:
+        return JSONResponse(status_code=503, content={"error": str(e)[:200]})
+
+
 @app.get("/api/overview")
 def get_overview():
     try:
         from warden import cache
 
-        body, _hit = cache.cached("overview", {}, lambda: {"totals": overview.totals(), "hero": overview.kev_hero()})
+        body, _hit = cache.cached("overview", {}, lambda: {"totals": overview.totals(), "hero": overview.kev_hero(), "funnel": overview.funnel()})
         return body
     except Exception as e:
         return JSONResponse(status_code=503, content={"error": str(e)[:200]})

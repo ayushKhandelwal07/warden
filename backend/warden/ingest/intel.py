@@ -89,3 +89,19 @@ def enrich(vulns: list[dict], use_nvd: bool = True) -> dict:
         if v.get("severity") is None:
             v["severity"] = "UNKNOWN"
     return stats
+
+
+def freshness() -> dict:
+    """When each external feed was last retrieved (the on-disk cache's modification time, UTC ISO), so a reader can see
+    how old the threat intelligence behind a conclusion is. None when a feed was never fetched on this machine."""
+    from datetime import datetime, timezone
+
+    from warden.ingest.common import _cache_path
+
+    def when(ns: str, key: str):
+        p = _cache_path(ns, key)
+        return datetime.fromtimestamp(p.stat().st_mtime, timezone.utc).isoformat(timespec="seconds") if p.exists() else None
+
+    epss = sorted((_cache_path("epss", "x").parent).glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    epss_at = datetime.fromtimestamp(epss[0].stat().st_mtime, timezone.utc).isoformat(timespec="seconds") if epss else None
+    return {"kev": when("kev", "catalog"), "epss": epss_at}

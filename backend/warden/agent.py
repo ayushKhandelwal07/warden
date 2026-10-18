@@ -36,6 +36,9 @@ Rules:
 - Prioritising = reachable_findings. What breaks = blast_radius (depth 3 shows indirect dependents). Reviewers =
   who_knows. Before recommending an action, call policies_for. Acting = propose_fix_plan or analyze_pr; both only
   file a pending approval that a human must approve.
+- Reachability means "graph-reachable under the current topology model", not proven exploitable. Call something
+  exploitable only if a result shows tier exploit_signal; KEV means known exploitation was reported, not that it
+  happened here; EPSS is a likelihood estimate.
 - Reply in at most 110 words: the answer first, then up to 4 short "- " bullets with names, numbers, hops, policy ids.
   Use names and CVE ids exactly as tools return them. No tables or headings."""
 
@@ -181,6 +184,9 @@ TOPIC_TOOLS = [
 ]
 
 
+EXPLOIT_CLAIM_RE = re.compile(r"\bexploitable\b|\bactively exploited\b|\bexploited (here|in your|in this)\b", re.I)
+
+
 def verify(answer: str, results: list[dict], services: set[str]) -> dict:
     """No path, no claim: every CVE id and service named in the answer must occur in this turn's tool results,
     and claims about decisions, incidents, owners, policies or reviewers need the tool that knows them."""
@@ -192,6 +198,9 @@ def verify(answer: str, results: list[dict], services: set[str]) -> dict:
     for pattern, tools, topic in TOPIC_TOOLS:
         if pattern.search(answer) and not (called & tools):
             unsupported.append(f"{topic} (no {sorted(tools)[0]} call)")
+    # An "exploitable" claim needs an exploit-signal result behind it (reachable alone is not exploitability).
+    if EXPLOIT_CLAIM_RE.search(answer) and "exploit_signal" not in corpus:
+        unsupported.append("exploitability claim (no result with an exploit signal)")
     return {"ok": not unsupported and bool(results), "unsupported": unsupported, "checked": sorted(named_cves | named_svcs),
             "no_tools": not results}
 

@@ -16,7 +16,7 @@ def file_fix_plan(plan: dict, requested_by: str, trigger: dict | None = None, de
         return None, plan.get("summary") or "Nothing to upgrade."
     gate = plan.get("gate") or {"passed": True, "checks": []}
     if not gate["passed"]:
-        failed = "; ".join(f"{c['check']} ({c['detail']})" for c in gate["checks"] if not c["ok"])
+        failed = "; ".join(f"{c['check']} ({c['detail']})" for c in gate["checks"] if not c["ok"] and c.get("level", "block") == "block")
         return None, f"Rehearsal gate blocked this plan: {failed}"
     if dedupe_key and dedupe_key in pending_keys():
         return None, "An identical proposal is already waiting for approval."

@@ -53,13 +53,47 @@ def node_json(n: Node, order: int | None = None) -> dict:
     return out
 
 
+def provenance(rel: str, p: dict) -> dict:
+    """Where this hop of a path comes from, and whether it is a sourced fact or an inference.
+
+    kind = sourced   read directly from a file or feed (manifest, lockfile, OSV, CISA KEV)
+           inferred  derived from configuration (a CALLS edge comes from a service's address env var)
+           curated   written by the team for the demo organisation (ownership, data sensitivity)
+    """
+    url = p.get("source_url")
+    if rel == "REACHES":
+        return {"kind": "sourced", "source": "Kubernetes Service of type LoadBalancer", "url": None}
+    if rel == "EXPOSED_VIA":
+        return {"kind": "sourced", "source": "Kubernetes manifest: the service is behind the public LoadBalancer", "url": url}
+    if rel == "CALLS":
+        return {"kind": "inferred", "source": f"{p.get('via', 'rpc')} address in env var {p.get('env_var')}", "url": url,
+                "note": "Derived from configuration; no traffic was observed."}
+    if rel == "DEPENDS_ON":
+        how = "direct" if p.get("direct") else "transitive"
+        return {"kind": "sourced", "source": f"{how} dependency in {p.get('manifest')}", "url": url}
+    if rel == "REQUIRES":
+        return {"kind": "sourced", "source": "dependency tree in the lockfile", "url": None}
+    if rel == "AFFECTED_BY":
+        fixed = f", fixed in {p['fixed']}" if p.get("fixed") else ", no fixed version"
+        oid = p.get("osv_id")
+        return {"kind": "sourced", "source": f"OSV advisory {oid}{fixed}", "url": f"https://osv.dev/vulnerability/{oid}" if oid else None}
+    if rel == "LISTED_IN":
+        return {"kind": "sourced", "source": f"CISA KEV, added {p.get('date_added')}, due {p.get('due_date')}",
+                "url": "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"}
+    if p.get("source_type") == "curated":
+        return {"kind": "curated", "source": "written by the team for the demo organisation", "url": None}
+    return {"kind": "sourced", "source": rel, "url": url}
+
+
 def edge_json(e: Edge) -> dict:
+    props = _scalars(e.properties)
     return {
         "id": f"e{e.id}",
         "source": f"n{e.src_node}",
         "target": f"n{e.dest_node}",
         "type": e.relation,
-        "props": _scalars(e.properties),
+        "props": props,
+        "provenance": provenance(e.relation, props),
     }
 
 

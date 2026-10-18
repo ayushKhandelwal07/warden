@@ -58,3 +58,77 @@ def kev_hero() -> dict | None:
     r = rows[0]
     facts = {k: v for k, v in r.items() if k != "p"}
     return {"facts": facts, "evidence": Evidence().add_path(r["p"]).to_json(), "cypher": HERO_CYPHER, "ms": ms}
+
+
+# ---- Exposure funnel: every number is the result of the Cypher shown beside it ----
+
+_REACH = """MATCH (:Ingress)<-[:EXPOSED_VIA]-(:Service)-[:CALLS*0..4]->(s:Service)
+      -[:DEPENDS_ON]->(:Package)-[:AFFECTED_BY]->(v:Vulnerability)"""
+
+# Overlapping filters over unique advisories (an advisory can be KEV, reachable and on the entry service at once).
+_STAGES = [
+    {
+        "key": "present", "label": "Present", "unit": "advisories",
+        "definition": "Unique advisories whose vulnerable package version is in the inventory (lockfiles and Dockerfiles of every service).",
+        "cypher": "MATCH (v:Vulnerability) RETURN count(DISTINCT v) AS n",
+    },
+    {
+        "key": "reachable", "label": "Graph-reachable", "unit": "advisories",
+        "definition": "Unique advisories in a package used by a service the internet-facing service can reach through CALLS edges within 4 hops. "
+                      "Under the current topology model: CALLS edges are inferred from manifest environment variables, so this is not a proven network path.",
+        "cypher": _REACH + "\nRETURN count(DISTINCT v) AS n",
+    },
+    {
+        "key": "entry", "label": "On the entry service", "unit": "advisories",
+        "definition": "Unique advisories in a package used by the internet-facing service itself (0 hops).",
+        "cypher": """MATCH (:Ingress)<-[:EXPOSED_VIA]-(s:Service)-[:DEPENDS_ON]->(:Package)-[:AFFECTED_BY]->(v:Vulnerability)
+RETURN count(DISTINCT v) AS n""",
+    },
+    {
+        "key": "signal", "label": "Exploit signal", "unit": "advisories",
+        "definition": "Graph-reachable advisories that are on CISA KEV or have an EPSS exploit-likelihood score of at least 10%. "
+                      "EPSS is a probability estimate, not evidence of exploitation.",
+        "cypher": _REACH + "\nWHERE v.kev OR v.epss >= 0.1\nRETURN count(DISTINCT v) AS n",
+    },
+    {
+        "key": "kev", "label": "On CISA KEV", "unit": "advisories",
+        "definition": "Reachable advisories for which CISA reports known exploitation in the wild. It does not prove exploitation in this deployment.",
+        "cypher": _REACH + "\nWHERE v.kev\nRETURN count(DISTINCT v) AS n",
+    },
+]
+
+_INSTANCES = [
+    {
+        "key": "exposures", "label": "Exposures", "unit": "advisory × service",
+        "definition": "Graph-reachable (advisory, service) pairs. One advisory in four services is four exposures. The fix plan counts these.",
+        "cypher": _REACH + "\nRETURN count(DISTINCT [v.id, s.name]) AS n",
+    },
+    {
+        "key": "kev_exposures", "label": "KEV exposures", "unit": "advisory × service",
+        "definition": "Reachable (KEV advisory, service) pairs: the same KEV advisory counted once per affected service.",
+        "cypher": _REACH + "\nWHERE v.kev\nRETURN count(DISTINCT [v.id, s.name]) AS n",
+    },
+]
+
+
+def funnel(graph_name: str | None = None) -> dict:
+    """Counts for each stage, computed by running the stage's own Cypher, plus the snapshot they describe."""
+    from warden import cache, config
+
+    g = graph_name or config.org_graph_name()
+
+    def run(stage: dict) -> dict:
+        rows, ms = ro(stage["cypher"], graph_name=g)
+        return {**stage, "n": rows[0]["n"], "ms": ms}
+
+    run_row, _ = ro("MATCH (r:IngestRun) RETURN r.ref AS ref, r.sha AS sha, r.at AS at ORDER BY r.at DESC LIMIT 1", graph_name=g)
+    kev, _ = ro("MATCH (c:Catalog {name: 'CISA KEV'}) RETURN c.catalog_version AS version, c.released AS released", graph_name=g)
+    return {
+        "stages": [run(s) for s in _STAGES],
+        "instances": [run(s) for s in _INSTANCES],
+        "snapshot": {
+            "graph": g, "ingest": run_row[0] if run_row else None, "kev_catalog": kev[0] if kev else None,
+            "graph_version": cache.version(g),
+            "intel_retrieved": __import__("warden.ingest.intel", fromlist=["freshness"]).freshness(),
+        },
+    }

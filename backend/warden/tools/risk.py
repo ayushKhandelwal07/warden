@@ -11,6 +11,21 @@ risk = 50 × severity × exploit × exposure × data   (0–100)
 SEVERITY_DEFAULT = {"CRITICAL": 0.95, "HIGH": 0.8, "MEDIUM": 0.55, "LOW": 0.3, "UNKNOWN": 0.5}
 
 
+EPSS_SIGNAL = 0.1
+
+TIER_ASSUMPTION = "Reachability follows CALLS edges inferred from manifest environment variables. Function-level reachability is not analysed."
+
+
+def tier_of(kev: bool, epss: float | None) -> str:
+    """How much a graph-reachable advisory is worth worrying about, using only what the data supports.
+
+    exploit_signal  on CISA KEV (known exploitation reported) or EPSS >= 10% (a likelihood estimate, not an observation)
+    exposed         the vulnerable package sits in a service the internet-facing service can reach, with no exploit signal
+    (Present-only advisories, with no such path, never get a scored path at all.)
+    """
+    return "exploit_signal" if kev or (epss or 0.0) >= EPSS_SIGNAL else "exposed"
+
+
 def risk_factors(severity: str | None, cvss: float | None, kev: bool, epss: float | None, hops: int | None, data_weight: float | None) -> dict:
     sev = (cvss / 10.0) if cvss else SEVERITY_DEFAULT.get(severity or "UNKNOWN", 0.5)
     exploit = 1.0 if kev else 0.1 + 0.9 * (epss or 0.0)

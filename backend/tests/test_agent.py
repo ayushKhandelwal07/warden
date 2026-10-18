@@ -35,3 +35,10 @@ def test_verifier_flags_topic_claims_without_the_tool_that_knows_them():
     assert not v["ok"] and v["unsupported"] == ["decisions (no decisions_about call)"]
     ok = verify("No prior decision is recorded.", RESULTS + [{"tool": "decisions_about", "summary": "none", "rows": [], "args": {}}], SERVICES)
     assert ok["ok"]
+
+
+def test_verifier_flags_exploitability_claims_without_an_exploit_signal():
+    v = verify("CVE-2023-44487 on frontend is exploitable.", RESULTS, SERVICES)
+    assert not v["ok"] and any("exploitability" in u for u in v["unsupported"])
+    signal = [{**RESULTS[0], "rows": [{"service": "checkoutservice", "tier": "exploit_signal"}]}]
+    assert verify("CVE-2023-44487 on frontend is exploitable.", signal, SERVICES)["ok"]

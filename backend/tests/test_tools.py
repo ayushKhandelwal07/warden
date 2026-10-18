@@ -112,3 +112,27 @@ def test_tools_never_write():
     src = "".join(p.read_text(encoding="utf-8") for p in (Path(__file__).parent.parent / "warden" / "tools").glob("*.py"))
     assert "rw(" not in src and ".query(" not in src
     assert len(REGISTRY) >= 11
+
+
+def test_every_reachable_finding_has_a_tier_and_only_signal_tiers_have_signals():
+    from warden.tools.risk import tier_of
+
+    rows = ok("reachable_findings", limit=50)["rows"]
+    assert rows and all(r["tier"] in ("exposed", "exploit_signal") for r in rows)
+    top = rows[0]
+    assert top["tier"] == "exploit_signal" and top["kev"]
+    assert tier_of(False, 0.05) == "exposed" and tier_of(False, 0.1) == "exploit_signal" and tier_of(True, 0.0) == "exploit_signal"
+    assert "graph-reachable" in ok("reachable_findings", limit=3)["summary"]
+
+
+def test_every_hop_of_the_hero_path_has_provenance_and_calls_are_marked_inferred():
+    r = ok("reachable_findings", limit=1, paths=1)
+    edges = r["evidence"]["edges"]
+    assert edges and all(e["provenance"]["kind"] in ("sourced", "inferred", "curated") and e["provenance"]["source"] for e in edges)
+    by = {e["type"]: e["provenance"] for e in edges}
+    assert by["DEPENDS_ON"]["url"].startswith("https://github.com/") and "go.mod" in by["DEPENDS_ON"]["source"]
+    assert by["AFFECTED_BY"]["url"].startswith("https://osv.dev/vulnerability/")
+    assert by["LISTED_IN"]["source"].startswith("CISA KEV, added 2023-10-10")
+    from warden.graph.evidence import provenance
+
+    assert provenance("CALLS", {"via": "grpc", "env_var": "X_ADDR"})["kind"] == "inferred"
