@@ -52,6 +52,13 @@ def run(ref: str, fresh: bool = False, snapshot: bool = False, fetch: bool = Fal
 
     kev = intel.kev_meta()
     load.record_run(run_id, ref, sha, kev, g)
+    try:
+        from warden import contradictions
+
+        c = contradictions.scan(g)
+        print_(f"  contradictions: {c['open']} open")
+    except Exception as e:  # a failed scan must never fail the ingest
+        print_(f"  contradiction scan skipped: {type(e).__name__}")
 
     counts, _ = ro("MATCH (n) RETURN labels(n)[0] AS label, count(n) AS n ORDER BY n DESC", graph_name=g)
     if snapshot:

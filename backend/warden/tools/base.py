@@ -110,6 +110,7 @@ WITHOUT_GRAPH = {
     "blast_radius": "Without CALLS edges there is no way to find the indirect dependents of a service.",
     "path_between": "Shortest and alternative routes between two services need traversal, not lookups.",
     "rank": "Choke points and load-bearing packages need graph algorithms (all-pairs paths, PageRank).",
+    "contradictions_for": "Sources that disagree (a lockfile and a Dockerfile, a label and a manifest) are only visible when they are joined to the same service or package node.",
     "exposure_timeline": "A scanner shows today's list; it cannot say when an exposure opened or closed, or which decision and commit explain it.",
     "choke_points": "Counting the internet-to-sensitive-data paths through each service, and what cutting them removes, needs path enumeration over CALLS.",
 }

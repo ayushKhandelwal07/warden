@@ -376,6 +376,28 @@ def run_sync(body: dict = Body(default_factory=dict)):
         return JSONResponse(status_code=503, content={"error": f"{type(e).__name__}: {str(e)[:200]}"})
 
 
+@app.get("/api/contradictions")
+def get_contradictions(status: str = "open"):
+    """Evidence contradictions stored in the graph (open by default)."""
+    try:
+        from warden import contradictions
+
+        return {"items": contradictions.listing(status=None if status == "all" else status)}
+    except Exception as e:
+        return JSONResponse(status_code=503, content={"error": f"{type(e).__name__}: {str(e)[:200]}"})
+
+
+@app.post("/api/contradictions/scan")
+def scan_contradictions():
+    """Re-checks every source against the others, stores what disagrees, and resolves what no longer does."""
+    try:
+        from warden import contradictions
+
+        return {**contradictions.scan(), "items": contradictions.listing()}
+    except Exception as e:
+        return JSONResponse(status_code=503, content={"error": f"{type(e).__name__}: {str(e)[:200]}"})
+
+
 @app.get("/api/services")
 def list_services():
     """Service names with their entry flag, callees and vulnerable package names, for the what-if builder."""
@@ -416,7 +438,14 @@ def reset():
 
 @app.get("/api/approvals")
 def list_approvals():
-    return approvals.list_all()
+    items = approvals.list_all()
+    try:  # a decision is marked verified when a sync finds every promised exposure gone
+        from warden.graph.client import ro
+
+        done = {r["a"] for r in ro("MATCH (d:Decision {status: 'verified'}) RETURN d.approval_id AS a")[0]}
+    except Exception:
+        done = set()
+    return [{**a, "verified": a["id"] in done} for a in items]
 
 
 @app.get("/api/approvals/{aid}")

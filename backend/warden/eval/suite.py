@@ -221,9 +221,20 @@ def s_stale(g):
             "ok": (same, stale) == ("fresh", "stale"), "baseline_ok": False, "baseline_answer": "reuses the old approval as is; it has no memory of what the graph looked like"}
 
 
-PENDING = [
-    ("contradiction", "Lockfile and Dockerfile disagree on a version", "Warden abstains and flags the contradiction", "Phase 1d: contradiction detection"),
-]
+def s_contradiction(g):
+    from warden import contradictions
+
+    build(g, _base({"frontend": []}, deps=[("frontend", "libgo", "1.0.0", True, [_V("EVAL-11", "HIGH", 8.0, False, 0.01, "1.1.0")])]))
+    trace = Trace()
+    found = contradictions.check_toolchain("frontend", contradictions.go_versions("module m\n\ngo 1.22\ntoolchain go1.22.5\n"), "1.21.0", "go.mod")
+    b = _summary_numbers(scored_paths(trace, graph_name=g))
+    gate = _gate({**b, "risk": b["risk"] + 10}, b, [], None, [], found)
+    return {"trace": trace, "gate": gate, "expected": "abstain: go.mod and the Dockerfile disagree on the Go version, so the gate blocks and flags the contradiction",
+            "answer": _gate_text(gate), "ok": bool(found) and not gate["passed"], "baseline_ok": False,
+            "baseline_answer": "does not compare sources; proposes the fix using whichever version it read first"}
+
+
+PENDING: list = []
 
 SCENARIOS = [
     ("reachable_direct", "Reachable direct dependency on the entry service", "reachability", s_reachable_direct),
@@ -238,6 +249,7 @@ SCENARIOS = [
     ("kev_vs_cvss", "KEV MEDIUM against a CRITICAL with no exploit signal", "priority", s_kev_vs_cvss),
     ("choke_point", "One service carries most paths to card and personal data", "choke", s_choke),
     ("stale_decision", "A past approval after the graph was re-read from another commit", "memory", s_stale),
+    ("contradiction", "go.mod and the Dockerfile disagree on the Go version", "abstain", s_contradiction),
 ]
 
 

@@ -11,7 +11,7 @@
 import time
 import uuid
 
-from warden import config, memory, regression
+from warden import config, contradictions, memory, regression
 from warden.actions import patches
 from warden.graph.evidence import Evidence
 from warden.graph.client import copy_graph, delete_graph, unwind
@@ -128,7 +128,7 @@ def _check(name: str, ok: bool, detail: str, level: str = "block") -> dict:
     return {"check": name, "ok": ok, "detail": detail, "level": level}
 
 
-def _gate(before: dict, after: dict, added: list[tuple], reg: dict | None = None, items: list[dict] | None = None) -> dict:
+def _gate(before: dict, after: dict, added: list[tuple], reg: dict | None = None, items: list[dict] | None = None, conflicts: list[dict] | None = None) -> dict:
     """Deterministic gate: a fix is only proposed if the graph copy *proves* it helps and creates no new exposure.
     No language model is involved; the LLM cannot talk its way past this."""
     empty = {"before": 0, "after": 0, "removed": [], "remaining": [], "new": []}
@@ -142,6 +142,8 @@ def _gate(before: dict, after: dict, added: list[tuple], reg: dict | None = None
     minor_new = [r for r in sens["new"] if r not in serious_new]
     left = sorted(after.get("by_key", {}).values(), key=lambda f: -f.get("risk", 0))[:3]
     checks = [
+        _check("no open evidence contradiction on what this plan touches", not conflicts,
+               "; ".join(c["detail"] for c in (conflicts or [])[:3]) or "none"),
         _check("total risk drops", after["risk"] < before["risk"], f"{round(before['risk'])} → {round(after['risk'])}"),
         _check("KEV exposures eliminated or reduced", after["kev_findings"] == 0 or after["kev_findings"] < before["kev_findings"],
                f"{before['kev_findings']} → {after['kev_findings']} ({len(kev['removed'])} of {kev['before']} removed)"),
@@ -216,7 +218,8 @@ def build_plan(max_fixes: int = 5, graph_name: str | None = None, chosen_overrid
                 "changes": sorted({(p["service"], p["manifest"], p["direct"]) for p in c["removable"]}),
             }
         )
-    gate = _gate(before, after, added, reg, items)
+    conflicts = contradictions.blocking(items, graph_name)
+    gate = _gate(before, after, added, reg, items, conflicts)
     pct = 0 if not before["risk"] else round(100 * (before["risk"] - after["risk"]) / before["risk"])
     kev_left = after["kev_findings"]
     summary = (
@@ -238,6 +241,7 @@ def build_plan(max_fixes: int = 5, graph_name: str | None = None, chosen_overrid
         "new_advisories_on_upgraded_versions": reh["new_advisories"],
         "rehearsal": {"graph": reh["graph"], "ms": reh["ms"], "deleted": True},
         "memory": mem,
+        "contradictions": conflicts,
         "queries": trace.queries,
     }
 

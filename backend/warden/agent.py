@@ -38,6 +38,8 @@ Rules:
   file a pending approval that a human must approve.
 - "What if X became public / A stopped calling B / we upgraded P" = what_if (rehearsed on a copy, changes nothing). "Which service should we
   secure first" = choke_points. "Which fix plan is best" = compare_plans (read-only; propose_fix_plan files one).
+- Before recommending a fix for a service or advisory, call contradictions_for. If it returns open contradictions, say so and do not
+  recommend the fix that depends on the disputed fact.
 - Reachability means "graph-reachable under the current topology model", not proven exploitable. Call something
   exploitable only if a result shows tier exploit_signal; KEV means known exploitation was reported, not that it
   happened here; EPSS is a likelihood estimate.

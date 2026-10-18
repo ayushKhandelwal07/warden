@@ -75,6 +75,37 @@ ORDER BY decided_at DESC LIMIT 10""",
 
 
 @tool(
+    "contradictions_for",
+    "Contradictions",
+    "Places where two of our own sources disagree about a service, package or advisory (Dockerfile vs go.mod toolchain, package.json vs lockfile, "
+    "an advisory whose fixed version is not newer than the installed one, a public/internal label vs the ingress edges, a 'verified' decision whose "
+    "exposures are still reachable). If any is open, say so and do not recommend a fix that depends on the disputed fact.",
+    [
+        Param("service", "string", "Service name (optional)"),
+        Param("vuln", "string", "CVE/GHSA id (optional)"),
+    ],
+    "memory",
+    {"service": "paymentservice"},
+)
+def contradictions_for(trace: Trace, service, vuln, graph_name=None):
+    svc = resolve_service(trace, service, graph_name) if service else None
+    vid = resolve_vulnerability(trace, vuln, graph_name) if vuln else None
+    rows = trace.ro(
+        """MATCH (x:Contradiction {status: 'open'}) WHERE ($s IS NULL OR x.service = $s) AND ($v IS NULL OR x.vuln = $v)
+RETURN x.kind AS kind, x.detail AS detail, x.resolution AS resolution, x.sources_json AS sources, x.service AS service, x.vuln AS vuln
+ORDER BY x.kind, x.detail LIMIT 25""",
+        {"s": svc, "v": vid},
+        graph_name,
+    )
+    target = " / ".join(x for x in [svc, vid] if x) or "the whole graph"
+    if not rows:
+        return Result(f"No open evidence contradiction about {target}: the sources Warden checked agree.", [], None, None)
+    out = [{**r, "sources": "; ".join(json.loads(r["sources"] or "[]"))} for r in rows]
+    return Result(f"{len(out)} open contradiction(s) about {target}. Do not rely on the disputed fact until resolved. First: {out[0]['detail']}", out,
+                  ["kind", "detail", "resolution", "sources"], None)
+
+
+@tool(
     "exposure_timeline",
     "Exposure timeline",
     "What happened over time to a service or an advisory: exposures opened and closed, dependency moves, service exposure changes, "
