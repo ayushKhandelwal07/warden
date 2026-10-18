@@ -16,6 +16,23 @@ type Overlay = { cut: Set<string>; keep: Set<string>; secured: string | null };
 /** Edges used by the enumerated internet-to-sensitive-data routes (service -> service, last service -> data asset). */
 const edgesOf = (route: string[], asset: string) => [...route.slice(1).map((s, i) => `${route[i]}>${s}`), `${route[route.length - 1]}>@${asset}`];
 
+/** The question sent to Ask: what the map shows about this service, then what to find out, so the agent starts from the same context. */
+function askAbout(s: SurfaceService, d: Surface, secured: string | null): string {
+  const callers = d.calls.filter((c) => c.to === s.name).map((c) => c.from);
+  const callees = d.calls.filter((c) => c.from === s.name).map((c) => c.to);
+  const where = s.hops === null ? "is not reachable from the internet" : s.hops === 0 ? "is the internet-facing service" : `is ${s.hops} hop${s.hops === 1 ? "" : "s"} from the internet`;
+  const facts = [
+    `On the attack surface map, ${s.name} ${where}`,
+    `has ${s.exposures} reachable exposure${s.exposures === 1 ? "" : "s"} (risk ${s.risk})`,
+    s.kev ? "carries a CISA KEV exposure" : "has no CISA KEV exposure",
+    s.reads.length ? `reads ${s.reads.join(", ")}` : "reads no PCI/PII data",
+    callers.length ? `is called by ${callers.join(", ")}` : "",
+    callees.length ? `calls ${callees.join(", ")}` : "",
+    secured ? `(the map is showing ${secured} secured)` : "",
+  ].filter(Boolean);
+  return `${facts.join("; ")}. Explain what is risky here, the exact path an attacker would take to reach it, what breaks if it goes down, which fix to make first, and who owns it.`;
+}
+
 /** Counts how many routes pass through each internal service; the entry service is excluded. */
 function chokeRank(routes: Surface["routes"]) {
   const entry = new Set(routes.map((r) => r.route[0]));
@@ -203,7 +220,7 @@ export function AttackSurfaceMap({ whatIfPaths, compact, publicData }: { whatIfP
           {svc.kev && <span className="font-medium text-accent">CISA KEV</span>}
           {svc.reads.length > 0 && <span className="text-muted">reads {svc.reads.join(", ")}</span>}
           {!publicData && (
-            <Link to={to(`/ask?q=${encodeURIComponent(`What is the risk in ${svc.name}?`)}`)} className="ml-auto inline-flex items-center gap-1 font-medium hover:opacity-80">
+            <Link to={to(`/ask?q=${encodeURIComponent(askAbout(svc, d, secured))}`)} className="ml-auto inline-flex items-center gap-1 font-medium hover:opacity-80">
               Ask about it <ArrowRight size={13} />
             </Link>
           )}

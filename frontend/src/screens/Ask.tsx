@@ -110,6 +110,9 @@ export function Ask() {
   const readOnly = !!chat && !chat.mine;
 
   useEffect(() => {
+    if (chatId) started.current = false;
+    // A question handed over as ?q= is already being asked: don't wipe it (React re-runs effects in development).
+    if (!chatId && started.current) return;
     if (chatId && chatId === live.current) return;
     gen.current++;
     live.current = null;
