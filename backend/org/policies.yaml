@@ -1,4 +1,4 @@
-# CURATED for the demo org (disclosed in the README): remediation policies the agent must apply and cite.
+# CURATED for this org: remediation policies the agent must apply and cite.
 policies:
   - id: POL-KEV-48H
     rule_text: A vulnerability on the CISA KEV list that is reachable from the internet must be fixed within 48 hours.

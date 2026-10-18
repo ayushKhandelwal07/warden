@@ -110,3 +110,26 @@ def test_issue_approval_that_fails_stays_pending_with_a_clear_reason(monkeypatch
     finally:
         rw("MATCH (a:Approval {id: $id}) DELETE a", {"id": a["id"]}, approvals.agents_graph())
         rw("MATCH (d:Decision {approval_id: $id}) DETACH DELETE d", {"id": a["id"]})
+
+
+def test_turning_the_watcher_on_does_not_rewrite_the_graph_until_the_fork_moves(monkeypatch):
+    monkeypatch.setattr(config, "GITHUB_TOKEN", "x")
+    monkeypatch.setattr(config, "GITHUB_OWNER", "someone")
+    head = {"sha": "aaaaaaa1111111"}
+    monkeypatch.setattr(watch.github, "branch_head", lambda b: head["sha"])
+    monkeypatch.setattr(watch.github, "list_prs", lambda *a, **k: [])
+    synced = []
+    monkeypatch.setattr(watch.sync, "sync_fork", lambda b: synced.append(b) or {"fixed": [], "new": [], "decisions": [], "exposure": {"added": []}, "worse": []})
+    try:
+        watch.set_enabled(True)
+        assert watch.state()["last_head"] == "aaaaaaa1111111"
+        assert watch.tick()["synced"] is False and synced == []  # the demo graph differs from the fork's commit, yet nothing is re-read
+        head["sha"] = "bbbbbbb2222222"
+        out = watch.tick()
+        assert out["synced"] is True and synced == ["demo-base"] or synced == [config.GITHUB_BASE or "main"]
+        assert watch.state()["last_head"] == "bbbbbbb2222222"
+        assert watch.tick()["synced"] is False  # and it does not re-read again for the same commit
+    finally:
+        watch.set_enabled(False)
+        rw("MATCH (e:WatchEvent) WHERE e.kind = 'watch' OR e.kind = 'sync' DELETE e", graph_name=watch._g())
+        rw("MATCH (w:Watcher {id: 'main'}) REMOVE w.last_head", graph_name=watch._g())

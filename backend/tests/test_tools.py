@@ -5,6 +5,7 @@ import pytest
 
 from warden.graph.client import db
 from warden.tools import REGISTRY, run_tool
+from tests.pinned import pinned
 
 try:
     db().list_graphs()
@@ -171,6 +172,7 @@ def test_surface_kev_route_is_the_shortest_call_chain():
     assert kev_edges(["fe"], calls, {"nope"}) == []
 
 
+@pinned
 def test_surface_endpoint_shape_on_the_demo_graph():
     from warden import surface
 
@@ -179,3 +181,13 @@ def test_surface_endpoint_shape_on_the_demo_graph():
     assert len(names) == 12 and names["frontend"]["entry"] and names["frontend"]["hops"] == 0 and names["frontend"]["kev"]
     assert any(e["to"] == "checkoutservice" for e in s["kev_path"]) and len(s["routes"]) == 7
     assert {a["name"] for a in s["assets"]} == {"CardData", "CustomerEmail", "ShippingAddress"} and s["max_risk"] > 0
+
+
+def test_repo_tools_are_read_only_and_guarded():
+    bad = run_tool("graph_query", {"cypher": "MATCH (n) DETACH DELETE n"})
+    assert "read-only" in bad["error"]
+    assert "exactly one" in run_tool("graph_query", {"cypher": "MATCH (n) RETURN n; MATCH (m) RETURN m"})["error"]
+    schema = run_tool("graph_schema", {})
+    assert not schema["error"] and {"Service", "Vulnerability"} <= {r["name"] for r in schema["rows"]}
+    ok = run_tool("graph_query", {"cypher": "MATCH (s:Service) RETURN s.name AS name ORDER BY name"})
+    assert not ok["error"] and 0 < len(ok["rows"]) <= 50

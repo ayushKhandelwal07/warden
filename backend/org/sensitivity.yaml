@@ -1,4 +1,4 @@
-# CURATED for the demo org (disclosed in the README): which services handle sensitive data.
+# CURATED for this org: which services handle sensitive data.
 # weight feeds the risk score of an attack path that ends at a service reading this data.
 data_assets:
   - name: CardData

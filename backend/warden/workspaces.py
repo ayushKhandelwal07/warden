@@ -19,13 +19,13 @@ class AccessError(PermissionError):
 
 
 def ensure_demo_workspace(s: Session):
-    """The shared demo team, bound to the already-ingested org graph. Every new user joins it."""
+    """The shared team and its project, bound to the already-ingested org graph. Every new user joins it."""
     if not s.get(Org, DEMO_ORG_ID):
-        s.add(Org(id=DEMO_ORG_ID, name="Online Boutique (demo)"))
+        s.add(Org(id=DEMO_ORG_ID, name="Google Microservices"))
         s.flush()
     if not s.scalar(select(Project).where(Project.slug == DEMO_PROJECT_SLUG)):
-        s.add(Project(org_id=DEMO_ORG_ID, slug=DEMO_PROJECT_SLUG, name="Online Boutique", graph=f"org_{config.TENANT}",
-                      repo_url=config.DEMO_REPO_URL, ref=config.DEMO_REF))
+        s.add(Project(org_id=DEMO_ORG_ID, slug=DEMO_PROJECT_SLUG, name="Google Microservices", graph=f"org_{config.TENANT}",
+                      repo_url=config.PROJECT_REPO_URL, ref=config.DEMO_REF))
 
 
 def on_signup(s: Session, user: User):

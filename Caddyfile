@@ -1,0 +1,7 @@
+# HTTPS reverse proxy in front of the API. Server-sent events (the Ask stream) must not be buffered.
+{$API_DOMAIN} {
+	encode gzip
+	reverse_proxy api:8000 {
+		flush_interval -1
+	}
+}

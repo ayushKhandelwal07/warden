@@ -1,0 +1,58 @@
+# Production on one EC2 instance (Docker + Docker Compose installed):
+#   cp .env.example .env   # fill it in
+#   docker compose -f docker-compose.prod.yml up -d --build
+# Caddy gets a free HTTPS certificate for API_DOMAIN; point that DNS name at the instance first.
+# The frontend is deployed separately on Vercel (see DEPLOY.md).
+services:
+  falkordb:
+    image: falkordb/falkordb:latest
+    restart: unless-stopped
+    volumes:
+      - falkordb-data:/var/lib/falkordb/data
+    # not published: only the api container talks to it
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: warden
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: warden
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    profiles: ["localdb"]   # skip this service and set DATABASE_URL to Neon instead
+
+  api:
+    build: ./backend
+    restart: unless-stopped
+    depends_on: [falkordb]
+    env_file: .env
+    environment:
+      FALKORDB_HOST: falkordb
+      FALKORDB_PORT: "6379"
+      FALKORDB_SSL: "false"
+      COOKIE_SAMESITE: none
+      COOKIE_SECURE: "true"
+    volumes:
+      - repo-cache:/app/data
+    expose:
+      - "8000"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on: [api]
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      API_DOMAIN: ${API_DOMAIN:?set API_DOMAIN in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+
+volumes:
+  falkordb-data:
+  postgres-data:
+  repo-cache:
+  caddy-data:

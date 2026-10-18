@@ -112,6 +112,10 @@ WITHOUT_GRAPH = {
     "rank": "Choke points and load-bearing packages need graph algorithms (all-pairs paths, PageRank).",
     "contradictions_for": "Sources that disagree (a lockfile and a Dockerfile, a label and a manifest) are only visible when they are joined to the same service or package node.",
     "exposure_timeline": "A scanner shows today's list; it cannot say when an exposure opened or closed, or which decision and commit explain it.",
+    "graph_schema": "Without the graph there is no schema to read: labels, relationship types and properties are what let any question be turned into a query.",
+    "graph_query": "Arbitrary questions about services, packages, advisories, people and decisions need joins across all of them; only a graph answers them in one read-only query.",
+    "repo_info": "GitHub lists branches and PRs separately; joined to the graph they can be tied to the services and exposures each one touches.",
+    "person_profile": "A commit author becomes useful when joined to the files, services and reviews they touched, which only the graph holds.",
     "choke_points": "Counting the internet-to-sensitive-data paths through each service, and what cutting them removes, needs path enumeration over CALLS.",
 }
 

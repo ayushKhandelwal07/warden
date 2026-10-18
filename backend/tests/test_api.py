@@ -15,6 +15,7 @@ except Exception:
 import uuid
 
 from warden.db import init_db
+from tests.pinned import pinned
 
 init_db()
 client = TestClient(api.app)
@@ -88,6 +89,7 @@ def test_health_reports_graph_and_provenance():
     assert body["ingest"]["sha"] and body["kev"]["version"]
 
 
+@pinned
 @live
 def test_overview_hero_is_the_kev_path_in_order():
     body = client.get("/api/overview").json()
@@ -294,6 +296,7 @@ def test_baseline_endpoint_on_the_real_graph_is_internally_consistent():
     assert all(1 <= r["baseline_rank"] <= c["universe"] and 1 <= r["graph_rank"] <= c["universe"] for r in c["kev_positions"])
 
 
+@pinned
 @live
 def test_services_list_and_whatif_endpoint():
     svcs = client.get("/api/services").json()

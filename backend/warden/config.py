@@ -17,6 +17,8 @@ TENANT = os.getenv("TENANT", "demo")
 
 DEMO_REPO_URL = os.getenv("DEMO_REPO_URL", "https://github.com/GoogleCloudPlatform/microservices-demo.git")
 DEMO_REF = os.getenv("DEMO_REF", "v0.8.0")
+# What the project page shows as its repository: our fork when one is configured, else the source repo.
+PROJECT_REPO_URL = (f"https://github.com/{os.getenv('GITHUB_OWNER')}/{os.getenv('GITHUB_REPO', 'microservices-demo')}" if os.getenv("GITHUB_OWNER") else DEMO_REPO_URL)
 HISTORY_SINCE = os.getenv("HISTORY_SINCE", "2022-06-15")
 
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.groq.com/openai/v1").rstrip("/")

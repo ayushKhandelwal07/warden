@@ -50,7 +50,13 @@ def _set(**props):
 
 
 def set_enabled(on: bool) -> dict:
-    _set(enabled=on)
+    props: dict = {"enabled": on}
+    if on and github.configured():
+        try:  # from now on "changed" means the fork moved after this moment, not "differs from the demo checkout"
+            props["last_head"] = github.branch_head(config.GITHUB_BASE or "main")
+        except Exception:
+            pass
+    _set(**props)
     event("watch", "Watcher turned on" if on else "Watcher turned off")
     return state()
 
@@ -120,7 +126,7 @@ def tick(force: bool = False) -> dict:
             return {"ok": False, "status": "GitHub is not connected"}
         branch = config.GITHUB_BASE or "main"
         head = github.branch_head(branch)
-        built = sync.current_ref().get("sha")
+        built = state().get("last_head") or sync.current_ref().get("sha")
         out: dict = {"ok": True, "head": head, "synced": False, "proposals": []}
 
         # fix PRs merged since last look (an event, not a decision: the sync below does the verifying). One API call.
@@ -133,12 +139,12 @@ def tick(force: bool = False) -> dict:
         if head != built or force:
             event("change", f"Fork {branch} moved to {head[:7]}; re-reading the graph")
             rec = sync.sync_fork(branch)
+            _set(last_head=head)
             out.update(synced=True, fixed=len(rec["fixed"]), new=len(rec["new"]))
+            event("sync", f"Graph re-read at {head[:7]}: {len(rec['fixed'])} exposures gone, {len(rec['new'])} new")
             for d in rec["decisions"]:
                 if d["verified"]:
                     event("verified", f"Verified: {d['text']} (all {d['targets']} targeted findings are gone)", eid=f"verified-{d['decision']}")
-            if rec["fixed"]:
-                event("sync", f"Graph updated: {len(rec['fixed'])} findings gone, {len(rec['new'])} new")
 
             for line in rec["exposure"]["added"]:
                 svc = line.split(" via ")[0]

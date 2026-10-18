@@ -3,6 +3,7 @@ import pytest
 
 from warden import config, sync
 from warden.graph.client import db
+from tests.pinned import pinned
 
 try:
     db().list_graphs()
@@ -19,6 +20,7 @@ def test_diff_of_a_graph_with_itself_is_empty():
     assert d["dependencies"]["changed"] == 0 and d["before"] == d["after"]
 
 
+@pinned
 def test_what_if_exposing_payment_raises_risk_and_leaves_no_copy():
     r = sync.what_if_expose("paymentservice")
     assert r["after"]["risk"] > r["before"]["risk"]
@@ -37,6 +39,7 @@ def test_release_refs_start_at_the_demo_ref():
     assert refs[0] == config.DEMO_REF and "v0.8.1" in refs
 
 
+@pinned
 def test_what_if_changes_move_paths_and_never_touch_live():
     from warden import counterfactual
     from warden.graph.client import db
@@ -56,6 +59,7 @@ def test_what_if_changes_move_paths_and_never_touch_live():
             counterfactual.what_if(bad)
 
 
+@pinned
 def test_what_if_finds_a_best_intervention():
     from warden import counterfactual
 

@@ -36,6 +36,9 @@ Rules:
 - Prioritising = reachable_findings. What breaks = blast_radius (depth 3 shows indirect dependents). Reviewers =
   who_knows. Before recommending an action, call policies_for. Acting = propose_fix_plan or analyze_pr; both only
   file a pending approval that a human must approve.
+- Anything about the repository itself (branches, open PRs and issues, commits, who maintains it) = repo_info. Anything about a person, including the
+  user asking or a maintainer they work with = person_profile. For "me" or "I" use the GitHub login from the context line. If no other tool covers a
+  question about the graph, call graph_schema, then answer with one graph_query. Never guess a person's role: read it from a tool. For "who maintains", "who else" or "who am I working with", call BOTH repo_info and person_profile, and only say nobody else appears if repo_info lists nobody else.
 - "What if X became public / A stopped calling B / we upgraded P" = what_if (rehearsed on a copy, changes nothing). "Which service should we
   secure first" = choke_points. "Which fix plan is best" = compare_plans (read-only; propose_fix_plan files one).
 - Before recommending a fix for a service or advisory, call contradictions_for. If it returns open contradictions, say so and do not
@@ -233,7 +236,7 @@ CVE_RE = re.compile(r"\b(?:CVE-\d{4}-\d{4,7}|GHSA-[\w]{4}-[\w]{4}-[\w]{4})\b", r
 TOPIC_TOOLS = [
     (re.compile(r"\bdecision|\bdecided\b", re.I), {"decisions_about"}, "decisions"),
     (re.compile(r"\bincident|postmortem", re.I), {"past_incidents", "analyze_pr"}, "incidents"),
-    (re.compile(r"\bowned by\b|\bowner|\bowns\b", re.I), {"who_owns", "analyze_pr", "blast_radius", "propose_fix_plan"}, "ownership"),
+    (re.compile(r"\bowned by\b|\bowner|\bowns\b", re.I), {"who_owns", "analyze_pr", "blast_radius", "propose_fix_plan", "repo_info", "person_profile"}, "ownership"),
     (re.compile(r"\bpolic(y|ies)\b|POL-[A-Z0-9-]+", re.I), {"policies_for", "analyze_pr"}, "policies"),
     (re.compile(r"\breviewer|\bknows\b|\bexpert", re.I), {"who_knows", "analyze_pr"}, "reviewers"),
 ]
@@ -260,6 +263,28 @@ def verify(answer: str, results: list[dict], services: set[str]) -> dict:
             "no_tools": not results}
 
 
+def _graph_context() -> str:
+    """One line of scope for the model: which graph it is looking at and how big it is, so it knows what 'everything' means."""
+    try:
+        from warden.graph import overview
+
+        t, h = overview.totals(), overview.health()
+        ing = (h.get("ingest") or {}).get("ref")
+        who = ""
+        try:
+            from warden.api import accounts
+
+            u = accounts.user()
+            who = f" The person asking is {u['name']} ({u['email']}); their GitHub login is {config.GITHUB_OWNER}, and they own the fork {config.GITHUB_OWNER}/{config.GITHUB_REPO}." if config.GITHUB_OWNER else f" The person asking is {u['name']}."
+        except Exception:
+            pass
+        return (f"\n\nGraph in scope: {t['services']} services ({t['exposed_services']} internet-facing), {t['packages']} packages, "
+                f"{t['vulnerabilities']} advisories ({t['kev']} on CISA KEV){f', read from {ing}' if ing else ''}. "
+                "Questions about 'the system' or 'everything' mean this graph; name the tool you used." + who)
+    except Exception:
+        return ""
+
+
 async def run_turn(question: str, history: list[dict] | None = None) -> AsyncIterator[dict]:
     t0 = time.perf_counter()
     services, _ = _known_entities()
@@ -267,7 +292,7 @@ async def run_turn(question: str, history: list[dict] | None = None) -> AsyncIte
     use_mcp = bool(MCP.client) and config.org_graph_name() == f"org_{config.TENANT}"
     tools = MCP.tools + LOCAL_TOOLS if use_mcp else [*(_direct_tools()), *LOCAL_TOOLS]
     via = "mcp" if use_mcp else "direct"
-    messages = [{"role": "system", "content": SYSTEM}, *(history or [])[-8:], {"role": "user", "content": question}]
+    messages = [{"role": "system", "content": SYSTEM + _graph_context()}, *(history or [])[-8:], {"role": "user", "content": question}]
     results: list[dict] = []
     corrected = False
     yield {"type": "start", "model": LLM_MODEL, "via": via, "tools": len(tools)}

@@ -23,7 +23,7 @@ def _same_change(package: str | None, trigger: str | None) -> bool:
     "past_incidents",
     "Past incidents",
     "Incidents that affected the given services, newest first, flagging ones triggered by the same kind of change "
-    "(e.g. the same package being upgraded). Incident history in the demo org is curated and synthetic.",
+    "(e.g. the same package being upgraded). Incident history is curated and synthetic.",
     [
         Param("services", "string[]", "Services to check", required=True),
         Param("package", "string", "Package being changed, to match incidents triggered by the same change (optional)"),

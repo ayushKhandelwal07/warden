@@ -1,4 +1,4 @@
-# CURATED, SYNTHETIC incident history for the demo org (disclosed in the README and the UI).
+# CURATED, SYNTHETIC incident history for this org (disclosed in the UI).
 # Incidents are tied to services and to the *kind* of change that triggered them, never to a real
 # upstream pull request or its author: these incidents did not happen in the real project.
 incidents:

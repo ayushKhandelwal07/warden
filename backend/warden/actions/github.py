@@ -139,6 +139,56 @@ def merge_pr(number: int) -> dict:
     return {"merged": bool(r.get("merged")), "sha": r.get("sha"), "message": r.get("message")}
 
 
+# ---- read-only lookups used by the agent's repo tools (the fork only; target() refuses upstream) ----
+
+def read(path: str, params: dict | None = None):
+    """GET /repos/<fork><path>."""
+    repo = target()
+    with _client() as gh:
+        return _ok(gh.get(f"/repos/{repo}{path}", params=params or {}))
+
+
+def read_user(login: str) -> dict:
+    target()
+    with _client() as gh:
+        return _ok(gh.get(f"/users/{login}"))
+
+
+def role_of(login: str) -> str:
+    """The person's standing on the fork: owner, collaborator permission, or contributor."""
+    if login.lower() == (config.GITHUB_OWNER or "").lower():
+        return "owner of the fork (admin)"
+    repo = target()
+    with _client() as gh:
+        r = gh.get(f"/repos/{repo}/collaborators/{login}/permission")
+        if r.status_code == 200:
+            return f"collaborator ({r.json().get('permission')})"
+        c = gh.get(f"/repos/{repo}/contributors", params={"per_page": 100})
+        if c.status_code == 200:
+            for x in c.json():
+                if x["login"].lower() == login.lower():
+                    return f"contributor ({x['contributions']} commits)"
+    return "no recorded role on the fork"
+
+
+def people() -> list[dict]:
+    """The owner, collaborators (with their permission) and contributors of the fork."""
+    repo = target()
+    out: dict[str, dict] = {config.GITHUB_OWNER: {"login": config.GITHUB_OWNER, "role": "owner of the fork (admin)"}}
+    with _client() as gh:
+        r = gh.get(f"/repos/{repo}/collaborators", params={"per_page": 30})
+        if r.status_code == 200:
+            for c in r.json():
+                perms = c.get("permissions") or {}
+                level = "admin" if perms.get("admin") else "maintain" if perms.get("maintain") else "push" if perms.get("push") else "read"
+                out.setdefault(c["login"], {"login": c["login"], "role": f"collaborator ({level})"})
+        r = gh.get(f"/repos/{repo}/contributors", params={"per_page": 15})
+        if r.status_code == 200:
+            for c in r.json():
+                out.setdefault(c["login"], {"login": c["login"], "role": f"contributor ({c['contributions']} commits)"})
+    return list(out.values())
+
+
 def branch_head(branch: str) -> str:
     """Commit sha at the tip of a branch on the fork (one cheap call; the watcher polls this)."""
     repo = target()

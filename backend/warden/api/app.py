@@ -340,7 +340,7 @@ async def watch_check():
 
 @app.post("/api/watch/simulate")
 async def watch_simulate(body: dict = Body(default_factory=dict)):
-    """Demo helper: commit a one-line exposure change to the fork so the watcher has something real to notice."""
+    """Commit a one-line exposure change to the fork so the watcher has something real to notice."""
     service = str(body.get("service") or "paymentservice")
     if service not in sync_services():
         return JSONResponse(status_code=400, content={"error": f"Unknown service '{service}'."})
@@ -372,17 +372,6 @@ def run_sync(body: dict = Body(default_factory=dict)):
         return JSONResponse(status_code=400, content={"error": f"Unknown ref '{ref}'. Pick one of the listed releases."})
     try:
         return sync.sync(ref)
-    except Exception as e:
-        return JSONResponse(status_code=503, content={"error": f"{type(e).__name__}: {str(e)[:200]}"})
-
-
-@app.post("/api/demo/seed")
-def demo_seed():
-    """Adds the labelled demo history (a rejected upgrade, a pending rehearsed plan, a verified fix) if it is not there yet."""
-    try:
-        from warden import demo_seed as seed
-
-        return seed.seed()
     except Exception as e:
         return JSONResponse(status_code=503, content={"error": f"{type(e).__name__}: {str(e)[:200]}"})
 

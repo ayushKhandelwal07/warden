@@ -58,7 +58,7 @@ def provenance(rel: str, p: dict) -> dict:
 
     kind = sourced   read directly from a file or feed (manifest, lockfile, OSV, CISA KEV)
            inferred  derived from configuration (a CALLS edge comes from a service's address env var)
-           curated   written by the team for the demo organisation (ownership, data sensitivity)
+           curated   written by the team (ownership, data sensitivity)
     """
     url = p.get("source_url")
     if rel == "REACHES":
@@ -81,7 +81,7 @@ def provenance(rel: str, p: dict) -> dict:
         return {"kind": "sourced", "source": f"CISA KEV, added {p.get('date_added')}, due {p.get('due_date')}",
                 "url": "https://www.cisa.gov/known-exploited-vulnerabilities-catalog"}
     if p.get("source_type") == "curated":
-        return {"kind": "curated", "source": "written by the team for the demo organisation", "url": None}
+        return {"kind": "curated", "source": "written by the team", "url": None}
     return {"kind": "sourced", "source": rel, "url": url}
 
 

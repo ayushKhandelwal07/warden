@@ -1,4 +1,4 @@
-# CURATED for the demo org (disclosed in the README): teams and service ownership.
+# CURATED for this org: teams and service ownership.
 # Real people from the upstream history are never assigned to these teams.
 # `reviewers` are GitHub handles that may be requested as reviewers on OUR fork
 # (fork collaborators only); fill them in via .env WARDEN_REVIEWERS_<SLUG> or here.

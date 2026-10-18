@@ -170,5 +170,5 @@ def render_comment(r: dict) -> str:
         lines += ["", "**Suggested reviewers (from commit history)**"] + [
             f"- {x['person']}: {x['commits']} commits on {x['service']}, last {x['last_touched']}" for x in r["reviewers"]
         ]
-    lines += ["", "_Every line above comes from a path in the org graph (FalkorDB). Incident history in this demo is synthetic._"]
+    lines += ["", "_Every line above comes from a path in the org graph (FalkorDB). Incident history is curated and synthetic._"]
     return "\n".join(lines)

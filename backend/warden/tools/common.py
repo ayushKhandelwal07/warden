@@ -29,5 +29,5 @@ def resolve_vulnerability(trace: Trace, vuln: str, graph_name: str | None = None
         graph_name,
     )
     if not rows:
-        raise ToolError(f"Vulnerability '{vuln}' is not in the graph (no package in the demo org is affected by it).")
+        raise ToolError(f"Vulnerability '{vuln}' is not in the graph (no package in this org is affected by it).")
     return rows[0]["id"]

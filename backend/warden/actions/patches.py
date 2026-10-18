@@ -1,4 +1,4 @@
-"""Turns planned upgrades into real file edits on the demo repo checkout (the same files a PR will change)."""
+"""Turns planned upgrades into real file edits on the repo checkout (the same files a PR will change)."""
 import difflib
 import json
 import re
