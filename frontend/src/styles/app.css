@@ -24,3 +24,12 @@
   to { opacity: 1; transform: none; }
 }
 .rise-in { animation: rise-in 150ms ease-out both; }
+
+@keyframes blink {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgb(34 160 90 / 0.5); }
+  50% { opacity: 0.35; box-shadow: 0 0 0 4px rgb(34 160 90 / 0); }
+}
+.blink { animation: blink 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .blink { animation: none; }
+}

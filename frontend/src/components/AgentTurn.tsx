@@ -186,7 +186,7 @@ export function EvidencePanel({ turn, index, total, bare }: { turn: Turn | undef
         {evidence.nodes.length ? (
           <div className="flex flex-col gap-3">
             <PathGraph evidence={evidence} />
-            <PathProof evidence={evidence} compact />
+            <PathProof evidence={evidence} compact cypher={s ? [...s.results.values()].flatMap((r) => r.queries ?? []).find((q) => /MATCH/.test(q.cypher))?.cypher : undefined} />
           </div>
         ) : (
           <p className="px-2 py-10 text-center text-small text-muted">{!turn ? "The path appears here after you ask." : !s?.answer ? "Waiting for the graph…" : "No graph path was needed for this answer."}</p>

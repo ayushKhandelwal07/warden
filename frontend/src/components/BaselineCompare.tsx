@@ -1,6 +1,25 @@
 import { useState } from "react";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, ChevronDown } from "lucide-react";
 import type { Baseline, BaselineRow } from "../lib/api";
+
+/** One line per exposure: where it sits in this ranking and where the other ranking puts it. */
+function CompactRow({ r, rank, side }: { r: BaselineRow; rank: number; side: "baseline" | "graph" }) {
+  const other = side === "baseline" ? r.graph_rank : r.baseline_rank;
+  const moved = other - rank;
+  return (
+    <li className="flex items-center gap-2 px-4 py-2 text-[13px]">
+      <span className="w-5 shrink-0 text-right text-[12px] tabular-nums text-muted">{rank}</span>
+      {r.kev ? <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" title="On CISA KEV" /> : <span className="h-1.5 w-1.5 shrink-0" />}
+      <span className="min-w-0 flex-1 truncate">
+        <span className="font-mono">{r.vuln}</span> <span className="text-muted">{r.service}</span>
+      </span>
+      <span className="hidden shrink-0 text-[12px] tabular-nums text-muted sm:inline">{side === "baseline" ? `CVSS ${r.cvss ?? "n/a"}` : `risk ${r.risk}`}</span>
+      <span className={`w-[92px] shrink-0 text-right text-[12px] tabular-nums ${Math.abs(moved) > 9 ? "font-medium text-ink" : "text-muted"}`}>
+        {side === "baseline" ? "graph" : "CVSS"} #{other}
+      </span>
+    </li>
+  );
+}
 
 function Row({ r, rank, side }: { r: BaselineRow; rank: number; side: "baseline" | "graph" }) {
   const other = side === "baseline" ? r.graph_rank : r.baseline_rank;
@@ -26,9 +45,12 @@ function Row({ r, rank, side }: { r: BaselineRow; rank: number; side: "baseline"
   );
 }
 
+const SHORT = 5;
+
 /** The same exposures ranked two ways: by severity alone (or severity with CISA KEV first) and by Warden's graph-informed risk. */
 export function BaselineCompare({ data }: { data: Baseline }) {
   const [kevFirst, setKevFirst] = useState(false);
+  const [full, setFull] = useState(false);
   const left = kevFirst ? data.kev_aware.top : data.baseline_top;
   const overlap = kevFirst ? data.kev_aware.overlap : data.overlap;
   const kev = data.kev_positions;
@@ -76,35 +98,46 @@ export function BaselineCompare({ data }: { data: Baseline }) {
       </div>
 
       {h && (
-        <div className="flex flex-col gap-2 border-t border-line bg-code/50 px-4 py-3 text-[13px] sm:flex-row sm:items-center sm:gap-4">
-          <span className="font-medium">Nearly the same CVSS ({h.scanner_pick.cvss} vs {h.graph_pick.cvss}):</span>
-          <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 text-muted">
-            <span className="font-mono text-ink">{h.scanner_pick.vuln}</span> in {h.scanner_pick.service}, risk {h.scanner_pick.risk}
-            <ArrowRight size={13} className="shrink-0" />
-            <span className="font-mono text-ink">{h.graph_pick.vuln}</span> in {h.graph_pick.service}, risk {h.graph_pick.risk} ({h.risk_ratio}× higher)
-          </span>
-          <span className="text-[12px] text-muted">{h.graph_pick.why.join("; ")}</span>
+        <div className="border-t border-line bg-code/40 px-4 py-3">
+          <p className="text-[12px] font-medium text-muted">Nearly the same CVSS ({h.scanner_pick.cvss} vs {h.graph_pick.cvss}), very different risk</p>
+          <div className="mt-2 grid items-stretch gap-2 sm:grid-cols-[1fr_auto_1fr]">
+            <div className="rounded-card border border-line bg-bg px-3 py-2">
+              <p className="font-mono text-[12.5px]">{h.scanner_pick.vuln}</p>
+              <p className="text-[12px] text-muted">{h.scanner_pick.service} · risk {h.scanner_pick.risk}</p>
+            </div>
+            <div className="flex items-center justify-center text-[12px] font-semibold tabular-nums text-accent">
+              <ArrowRight size={14} className="mr-1 shrink-0" /> {h.risk_ratio}× higher
+            </div>
+            <div className="rounded-card border border-accent bg-bg px-3 py-2">
+              <p className="font-mono text-[12.5px]">{h.graph_pick.vuln}</p>
+              <p className="text-[12px] text-muted">{h.graph_pick.service} · risk {h.graph_pick.risk}</p>
+            </div>
+          </div>
+          <p className="mt-2 text-[12px] text-muted">{h.graph_pick.why.join("; ")}</p>
         </div>
       )}
 
       <div className="grid gap-px border-t border-line bg-line lg:grid-cols-2">
         <div className="bg-bg">
-          <p className="border-b border-line bg-code/40 px-4 py-2 text-[12px] font-medium text-muted">{kevFirst ? "CISA KEV first, then CVSS" : "CVSS only"} · top {data.n}</p>
+          <p className="border-b border-line bg-code/40 px-4 py-2 text-[12px] font-medium text-muted">{kevFirst ? "CISA KEV first, then CVSS" : "CVSS only"} · top {full ? data.n : SHORT}</p>
           <ol className="divide-y divide-line">
-            {left.map((r, i) => (
-              <Row key={`${r.vuln}-${r.service}`} r={r} rank={i + 1} side="baseline" />
-            ))}
+            {left.slice(0, full ? data.n : SHORT).map((r, i) =>
+              full ? <Row key={`${r.vuln}-${r.service}`} r={r} rank={i + 1} side="baseline" /> : <CompactRow key={`${r.vuln}-${r.service}`} r={r} rank={i + 1} side="baseline" />,
+            )}
           </ol>
         </div>
         <div className="bg-bg">
-          <p className="border-b border-line bg-code/40 px-4 py-2 text-[12px] font-medium text-muted">Warden graph risk · top {data.n}</p>
+          <p className="border-b border-line bg-code/40 px-4 py-2 text-[12px] font-medium text-muted">Warden graph risk · top {full ? data.n : SHORT}</p>
           <ol className="divide-y divide-line">
-            {data.graph_top.map((r, i) => (
-              <Row key={`${r.vuln}-${r.service}`} r={r} rank={i + 1} side="graph" />
-            ))}
+            {data.graph_top.slice(0, full ? data.n : SHORT).map((r, i) =>
+              full ? <Row key={`${r.vuln}-${r.service}`} r={r} rank={i + 1} side="graph" /> : <CompactRow key={`${r.vuln}-${r.service}`} r={r} rank={i + 1} side="graph" />,
+            )}
           </ol>
         </div>
       </div>
+      <button onClick={() => setFull((f) => !f)} aria-expanded={full} className="flex w-full items-center justify-center gap-1.5 border-t border-line px-4 py-2.5 text-[12.5px] font-medium text-muted hover:bg-code/50 hover:text-ink">
+        {full ? "Show fewer" : `Show the full top ${data.n}, with the reason for each`} <ChevronDown size={13} className={full ? "rotate-180" : ""} />
+      </button>
       <p className="border-t border-line px-4 py-2.5 text-[12px] text-muted">
         Severity-only ties break by advisory id. The graph score is {data.method.graph}. Neither ranking is tuned to the other.
       </p>

@@ -35,7 +35,7 @@ export function StatusDot({ health, error, up }: { health: Health | null; error:
   return (
     <div ref={box} className="relative">
       <button onClick={() => setOpen((o) => !o)} className="inline-flex h-9 items-center gap-2 rounded-full border border-line px-3 text-[12px] text-muted hover:text-ink" aria-expanded={open}>
-        <span className={`h-2 w-2 rounded-full ${down ? "bg-accent" : health ? "bg-ok" : "bg-line"}`} />
+        <span className={`h-2 w-2 rounded-full ${down ? "bg-accent" : health ? "bg-ok blink" : "bg-line"}`} />
         {label}
       </button>
       {open && (

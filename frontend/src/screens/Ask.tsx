@@ -7,12 +7,12 @@ import { useProject } from "../lib/auth";
 import { ChatTurn, EvidencePanel, type Turn } from "../components/AgentTurn";
 import { Sheet } from "../components/Sheet";
 
-const SUGGESTED = [
-  "What should we fix first?",
-  "What breaks if paymentservice goes down?",
-  "Who should review a change to checkoutservice?",
-  "Is anything in loadgenerator reachable?",
-  "Make a fix plan for the riskiest findings",
+const GROUPS: { title: string; items: string[] }[] = [
+  { title: "Reachability", items: ["What should we fix first?", "Is anything in loadgenerator reachable?", "Which advisories are on CISA KEV and how does an attacker get to them?"] },
+  { title: "Choke points and blast radius", items: ["Which service should we secure first to protect card data?", "What breaks if paymentservice goes down?", "What is the shortest path from the internet to CardData?"] },
+  { title: "What if", items: ["What if paymentservice became public?", "What if checkoutservice stopped calling paymentservice?", "What if we upgraded golang.org/x/net?"] },
+  { title: "Fixes and memory", items: ["Make a fix plan for the riskiest findings", "Which fix plan is best if we cannot change major versions?", "What did we decide about CVE-2023-44487 before?"] },
+  { title: "People and evidence", items: ["Who should review a change to checkoutservice?", "Do any of our sources contradict each other about paymentservice?", "How did the exposure of frontend change over time?"] },
 ];
 
 type ChatMeta = Omit<ConversationDetail, "messages">;
@@ -220,16 +220,25 @@ export function Ask() {
               </button>
             </div>
           ) : empty ? (
-            <div className="flex h-full flex-col items-center justify-center gap-6 text-center">
+            <div className="flex min-h-full flex-col items-center justify-center gap-6 py-4 text-center">
               <div>
                 <h1 className="text-h1 font-semibold">Ask Warden</h1>
                 <p className="mt-2 text-muted">Answers come only from the graph, with the path that proves them.</p>
               </div>
-              <div className="flex max-w-[560px] flex-wrap justify-center gap-2">
-                {SUGGESTED.map((s) => (
-                  <button key={s} onClick={() => ask(s)} className="rounded-full border border-line px-3.5 py-2 text-small text-muted hover:border-ink hover:text-ink">
-                    {s}
-                  </button>
+              <div className="grid w-full max-w-[760px] gap-3 text-left sm:grid-cols-2">
+                {GROUPS.map((g) => (
+                  <div key={g.title} className="overflow-hidden rounded-card border border-line">
+                    <p className="border-b border-line bg-code/50 px-3 py-1.5 text-[12px] font-medium text-muted">{g.title}</p>
+                    <ul>
+                      {g.items.map((s) => (
+                        <li key={s} className="border-t border-line first:border-0">
+                          <button onClick={() => ask(s)} className="w-full px-3 py-2 text-left text-[13px] hover:bg-code">
+                            {s}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
                 ))}
               </div>
             </div>

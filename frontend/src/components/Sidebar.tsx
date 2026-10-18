@@ -84,21 +84,13 @@ function UserMenu() {
   const [open, setOpen] = useState(false);
   const ref = useDismiss<HTMLDivElement>(open, () => setOpen(false));
   if (!me) return null;
-  const items = [
-    { label: "Team", path: "/settings/team" },
-    { label: "Projects", path: "/settings/projects" },
-    { label: "Profile", path: "/settings/profile" },
-  ];
   return (
     <div ref={ref} className="relative">
       {open && (
         <div className="rise-in absolute inset-x-0 bottom-[calc(100%+6px)] z-50 rounded-card border border-line bg-bg p-1.5 shadow-window">
-          <p className="truncate px-2.5 py-1.5 text-[12px] text-muted">{me.user.email}</p>
-          {items.map((i) => (
-            <Link key={i.path} to={to(i.path)} onClick={() => setOpen(false)} className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-small hover:bg-code">
-              <Settings size={14} className="text-muted" /> {i.label}
-            </Link>
-          ))}
+          <Link to={to("/settings/team")} onClick={() => setOpen(false)} className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-small hover:bg-code">
+            <Settings size={14} className="text-muted" /> Settings
+          </Link>
           <button
             onClick={async () => {
               await logout();

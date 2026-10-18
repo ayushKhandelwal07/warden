@@ -60,7 +60,8 @@ export function AttackSurfaceMap({ whatIfPaths, compact, publicData }: { whatIfP
   const [secure, setSecure] = useState(false);
   const d = surf.data;
   const ranking = useMemo(() => (d ? chokeRank(d.routes) : []), [d]);
-  const secured = secure && ranking.length ? ranking[0][0] : null;
+  const target = selected ?? (ranking.length ? ranking[0][0] : null);
+  const secured = secure ? target : null;
   const overlay = useMemo(() => (d ? overlayFor(secured, d.routes) : null), [d, secured]);
   const vertical = width < 640;
 
@@ -185,16 +186,16 @@ export function AttackSurfaceMap({ whatIfPaths, compact, publicData }: { whatIfP
         <div className="min-w-0 flex-1">
           <h3 className="text-[14px] font-semibold">Attack surface</h3>
           <p className="text-[12px] text-muted">
-            {d.services.length} services by hop distance from the internet. Size is risk; {kevCount} service{kevCount === 1 ? "" : "s"} carry a CISA KEV exposure (orange), and the thick route shows how an attacker gets there.
+            {d.services.length} services by hop distance from the internet. Click any service to choose what to secure. Size is risk; {kevCount} service{kevCount === 1 ? "" : "s"} carry a CISA KEV exposure (orange), and the thick route shows how an attacker gets there.
           </p>
         </div>
-        {!compact && ranking.length > 0 && (
+        {!compact && target && (
           <button
             onClick={() => setSecure((s) => !s)}
             aria-pressed={secure}
             className={`inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-[12.5px] font-medium ${secure ? "border-ink bg-ink text-white" : "border-line hover:bg-code/60"}`}
           >
-            <ShieldOff size={13} /> {secure ? `Secured ${ranking[0][0]}` : `Secure ${ranking[0][0]}`}
+            <ShieldOff size={13} /> {secure ? `Secured ${target} · undo` : `Secure ${target}`}
           </button>
         )}
       </header>
@@ -208,8 +209,14 @@ export function AttackSurfaceMap({ whatIfPaths, compact, publicData }: { whatIfP
       </div>
       {overlay && (
         <p className="border-t border-line bg-code/40 px-4 py-2.5 text-[12.5px]">
-          Securing <span className="font-mono font-medium">{overlay.secured}</span> cuts {total - left.length} of {total} internet-to-card-and-personal-data paths (dashed).{" "}
-          {stillReachable.length ? <>Still reachable by another route: <span className="font-medium">{stillReachable.join(", ")}</span> (solid dark).</> : "Nothing sensitive stays reachable."}
+          {total - left.length === 0 ? (
+            <>No internet-to-card-and-personal-data path goes through <span className="font-mono font-medium">{overlay.secured}</span>, so securing it changes nothing there. Try checkoutservice.</>
+          ) : (
+            <>
+              Securing <span className="font-mono font-medium">{overlay.secured}</span> cuts {total - left.length} of {total} internet-to-card-and-personal-data paths (dashed).{" "}
+              {stillReachable.length ? <>Still reachable by another route: <span className="font-medium">{stillReachable.join(", ")}</span> (solid dark).</> : "Nothing sensitive stays reachable."}
+            </>
+          )}
         </p>
       )}
       {svc && (

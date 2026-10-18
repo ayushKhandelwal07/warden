@@ -5,7 +5,7 @@ import { ChevronDown } from "lucide-react";
 export function Accordion({ title, hint, defaultOpen, children }: { title: string; hint?: string; defaultOpen?: boolean; children: ReactNode }) {
   const [open, setOpen] = useState(!!defaultOpen);
   return (
-    <div className="self-start overflow-hidden rounded-card border border-ink bg-bg">
+    <div className="w-full overflow-hidden rounded-card border border-ink bg-bg">
       <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-code/50">
         <span className="min-w-0 flex-1">
           <span className="block text-[15px] font-bold text-ink">{title}</span>

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { ArrowUpRight, CheckCircle2, CircleAlert, ShieldCheck } from "lucide-react";
 import { api, type Evidence, type EvidenceEdge } from "../lib/api";
 import { useContradictions } from "../lib/useContradictions";
+import { CypherBlock } from "./ui";
 
 const KIND: Record<string, { label: string; cls: string }> = {
   sourced: { label: "sourced", cls: "border-ink text-ink" },
@@ -11,7 +12,7 @@ const KIND: Record<string, { label: string; cls: string }> = {
 
 /** One row per hop of an attack path: what connects what, where that fact comes from, and whether it is sourced or inferred.
  *  "Validate" re-checks every hop against the live graph (read-only). */
-export function PathProof({ evidence, title = "How each hop is known", compact }: { evidence: Evidence; title?: string; compact?: boolean }) {
+export function PathProof({ evidence, title = "How each hop is known", compact, cypher }: { evidence: Evidence; title?: string; compact?: boolean; cypher?: string }) {
   const [state, setState] = useState<{ busy: boolean; valid?: boolean; checked?: number; missing?: string[]; ms?: number; error?: string }>({ busy: false });
   const names = useMemo(() => new Map(evidence.nodes.map((n) => [n.id, n])), [evidence]);
   const { items: disputes } = useContradictions();
@@ -46,6 +47,14 @@ export function PathProof({ evidence, title = "How each hop is known", compact }
           <ShieldCheck size={13} /> {state.busy ? "Checking…" : "Validate in graph"}
         </button>
       </header>
+      {cypher && (
+        <details className="border-b border-line px-4 py-2 text-[12px]">
+          <summary className="cursor-pointer font-medium text-accent">Show the graph query</summary>
+          <div className="mt-2">
+            <CypherBlock cypher={cypher} />
+          </div>
+        </details>
+      )}
       {onPath.length > 0 && (
         <p className="flex items-center gap-2 border-b border-line px-4 py-2 text-[12.5px] text-accent" role="status">
           <CircleAlert size={14} /> {onPath.length} open contradiction{onPath.length === 1 ? "" : "s"} on this path: {onPath[0].detail}

@@ -74,7 +74,7 @@ export function Hero({ hero }: { hero: NonNullable<Overview["hero"]> }) {
         <PathGraph evidence={evidence} />
       </div>
       <div className="border-t border-line p-3">
-        <PathProof evidence={evidence} />
+        <PathProof evidence={evidence} cypher={hero.cypher} />
       </div>
       <dl className="grid grid-cols-2 gap-px border-t border-line bg-line sm:grid-cols-4">
         {[
@@ -198,7 +198,7 @@ export function Home() {
       </div>
 
       <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
-        <Accordion title="Watcher" hint="Re-reads the fork when it changes and proposes fixes on its own.">
+        <Accordion defaultOpen title="Watcher" hint="Re-reads the fork when it changes and proposes fixes on its own.">
           <WatcherCard
             embedded
             onChange={() => {
