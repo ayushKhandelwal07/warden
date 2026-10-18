@@ -103,6 +103,42 @@ def get_pr(number: int) -> dict:
             "author": pr["user"]["login"], "files": [f["filename"] for f in files]}
 
 
+def parse_checks(runs: dict, status: dict) -> dict:
+    """Pure: GitHub check-runs + combined commit status -> one verdict.
+    state: success (everything finished and passed) · failure (any failed) · pending (anything still running) · none (no checks configured)."""
+    items = [{"name": r.get("name"), "status": r.get("status"), "conclusion": r.get("conclusion"), "url": r.get("html_url")} for r in runs.get("check_runs", [])]
+    items += [{"name": s.get("context"), "status": "completed" if s.get("state") != "pending" else "in_progress",
+               "conclusion": {"success": "success", "pending": None}.get(s.get("state"), "failure"), "url": s.get("target_url")} for s in status.get("statuses", [])]
+    if not items:
+        return {"state": "none", "runs": []}
+    bad = ("failure", "cancelled", "timed_out", "action_required", "startup_failure")
+    if any(i["conclusion"] in bad for i in items):
+        state = "failure"
+    elif any(i["status"] != "completed" for i in items):
+        state = "pending"
+    else:
+        state = "success"
+    return {"state": state, "runs": items}
+
+
+def pr_checks(number: int) -> dict:
+    """Build/test evidence for a fork PR: the check-runs and commit statuses on its head commit."""
+    repo = target()
+    with _client() as gh:
+        sha = _ok(gh.get(f"/repos/{repo}/pulls/{number}"))["head"]["sha"]
+        runs = _ok(gh.get(f"/repos/{repo}/commits/{sha}/check-runs", params={"per_page": 50}))
+        status = _ok(gh.get(f"/repos/{repo}/commits/{sha}/status"))
+    return {**parse_checks(runs, status), "sha": sha}
+
+
+def merge_pr(number: int) -> dict:
+    """Merges a PR on our fork (never upstream: target() refuses). Callers must have an explicit human click."""
+    repo = target()
+    with _client() as gh:
+        r = _ok(gh.put(f"/repos/{repo}/pulls/{number}/merge", json={"merge_method": "squash"}))
+    return {"merged": bool(r.get("merged")), "sha": r.get("sha"), "message": r.get("message")}
+
+
 def branch_head(branch: str) -> str:
     """Commit sha at the tip of a branch on the fork (one cheap call; the watcher polls this)."""
     repo = target()

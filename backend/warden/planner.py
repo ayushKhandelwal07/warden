@@ -11,7 +11,7 @@
 import time
 import uuid
 
-from warden import config, regression
+from warden import config, memory, regression
 from warden.actions import patches
 from warden.graph.evidence import Evidence
 from warden.graph.client import copy_graph, delete_graph, unwind
@@ -161,7 +161,15 @@ def _gate(before: dict, after: dict, added: list[tuple], reg: dict | None = None
 def build_plan(max_fixes: int = 5, graph_name: str | None = None, chosen_override: list[dict] | None = None) -> dict:
     trace = Trace()
     before_paths = scored_paths(trace, graph_name=graph_name)
-    chosen = chosen_override if chosen_override is not None else choose(before_paths, max_fixes)
+    mem = None
+    if chosen_override is not None:
+        chosen = chosen_override
+    else:
+        usual = choose(before_paths, max_fixes)
+        kept, notes = memory.adjust_candidates(before_paths, memory.ingest_sha())
+        chosen = choose(kept, max_fixes) if len(kept) != len(before_paths) else usual
+        names = lambda cs: sorted({c["package"] for c in cs})  # noqa: E731
+        mem = {"notes": notes, "changed": {"from": names(usual), "to": names(chosen)} if names(usual) != names(chosen) else None}
     if not chosen:
         return {"items": [], "summary": "No reachable vulnerability has a published fix: there is nothing to upgrade.", "before": None, "after": None}
     before_findings = best_findings(before_paths)
@@ -229,6 +237,7 @@ def build_plan(max_fixes: int = 5, graph_name: str | None = None, chosen_overrid
         "added": [{"vuln": v, "service": s} for v, s in added],
         "new_advisories_on_upgraded_versions": reh["new_advisories"],
         "rehearsal": {"graph": reh["graph"], "ms": reh["ms"], "deleted": True},
+        "memory": mem,
         "queries": trace.queries,
     }
 

@@ -26,9 +26,9 @@ def test_every_scenario_ran_and_matches_its_known_answer(card):
 def test_scorecard_reports_the_baseline_and_pending_scenarios(card):
     m = card["metrics"]
     assert m["reachability"]["warden"]["precision"] == 100 and m["reachability"]["baseline"]["precision"] < 100
-    assert m["gate"]["n"] == 3 and m["abstain"]["n"] == 1 and m["priority"]["n"] == 2
+    assert m["gate"]["n"] == 3 and m["abstain"]["n"] == 1 and m["priority"]["n"] == 2 and m["choke"]["n"] == 1 and m["memory"]["n"] == 1
     assert m["latency_ms"]["p95"] is not None
-    assert {p["id"] for p in card["pending"]} == {"contradiction", "choke_point", "stale_decision"}
+    assert {p["id"] for p in card["pending"]} == {"contradiction"}
 
 
 def test_eval_graphs_are_deleted(card):

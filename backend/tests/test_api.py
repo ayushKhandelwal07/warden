@@ -254,7 +254,8 @@ def test_unsafe_demo_plan_is_blocked_by_the_gate_and_never_filed():
     plan = client.post("/api/plans/unsafe").json()
     assert plan["unsafe_demo"] and not plan["gate"]["passed"]
     failed = {c["check"] for c in plan["gate"]["checks"] if not c["ok"] and c["level"] == "block"}
-    assert {"total risk drops", "KEV exposures eliminated or reduced"} <= failed
+    # Whether total risk also rises depends on live OSV data for the old pin; the KEV check is the invariant.
+    assert "KEV exposures eliminated or reduced" in failed
     assert len(client.get("/api/approvals").json()) == before
 
 
@@ -291,3 +292,52 @@ def test_baseline_endpoint_on_the_real_graph_is_internally_consistent():
     assert risk == sorted(risk, reverse=True)
     assert 0 <= c["overlap"] <= c["n"] and c["kev_positions"], "the KEV exposures are tracked in both rankings"
     assert all(1 <= r["baseline_rank"] <= c["universe"] and 1 <= r["graph_rank"] <= c["universe"] for r in c["kev_positions"])
+
+
+@live
+def test_services_list_and_whatif_endpoint():
+    svcs = client.get("/api/services").json()
+    assert {"paymentservice", "frontend"} <= {s["name"] for s in svcs} and [s["name"] for s in svcs if s["entry"]] == ["frontend"]
+    r = client.post("/api/whatif", json={"changes": [{"op": "remove_call", "from": "checkoutservice", "to": "paymentservice"}]}).json()
+    assert r["paths"]["after"] < r["paths"]["before"] and r["changes"][0]["label"].startswith("stop checkoutservice")
+    assert client.post("/api/whatif", json={"changes": [{"op": "expose", "service": "nope"}]}).json()["error"]
+    legacy = client.post("/api/whatif", json={"service": "paymentservice"}).json()
+    assert legacy["service"] == "paymentservice" and legacy["deleted"] and "fixed" in legacy
+
+
+def _fake_turn(monkeypatch, tool_args):
+    async def run_turn(question, history=None):
+        from warden.tools import run_tool as rt
+
+        res = rt("choke_points", tool_args)
+        yield {"type": "tool_call", "id": "c1", "tool": "choke_points", "args": tool_args, "via": "mcp"}
+        yield {"type": "tool_result", "id": "c1", "result": res}
+        yield {"type": "tool_call", "id": "c2", "tool": "propose_fix_plan", "args": {}, "via": "local"}
+        yield {"type": "tool_result", "id": "c2", "result": {"tool": "propose_fix_plan", "rows": [], "summary": "s", "queries": []}}
+        yield {"type": "answer", "text": "Secure checkoutservice first."}
+
+    monkeypatch.setattr(api.agent, "run_turn", run_turn)
+
+
+@live
+def test_replay_reproduces_and_reports_a_change(monkeypatch):
+    _fake_turn(monkeypatch, {"limit": 3})
+    evs = _ask(client, "Which service first?")
+    cid = evs[0]["id"]
+    saved = client.get(f"/api/conversations/{cid}").json()["messages"][-1]["data"]
+    assert saved["snapshot"]["graph"] and "graph_version" in saved["snapshot"]
+    r = client.post(f"/api/replay/{cid}/1", json={}).json()
+    assert r["reproduced"] and [c["status"] for c in r["calls"]] == ["same", "not_replayed"]
+    assert client.post(f"/api/replay/{cid}/9", json={}).status_code == 404
+
+
+def test_replay_events_reports_changed_rows_and_errors_without_touching_the_graph():
+    from warden import replay
+
+    ev = [{"type": "tool_call", "id": "1", "tool": "choke_points", "args": {}}, {"type": "tool_result", "id": "1", "result": {"rows": [{"service": "a"}, {"service": "b"}], "summary": "s", "queries": []}},
+          {"type": "tool_call", "id": "2", "tool": "choke_points", "args": {}}, {"type": "tool_result", "id": "2", "result": {"rows": [{"service": "a"}], "queries": []}},
+          {"type": "tool_call", "id": "3", "tool": "choke_points", "args": {}}, {"type": "tool_result", "id": "3", "result": {"rows": [], "queries": []}}]
+    outs = iter([{"rows": [{"service": "a"}], "summary": "s2"}, {"rows": [{"service": "a"}]}, {"error": "gone", "rows": []}])
+    calls = replay.replay_events(ev, None, lambda *a, **k: next(outs))
+    assert [c["status"] for c in calls] == ["changed", "same", "error"]
+    assert calls[0]["removed"] == [{"service": "b"}] and calls[0]["added"] == [] and calls[0]["summary_after"] == "s2"

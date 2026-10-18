@@ -158,3 +158,56 @@ ORDER BY pagerank DESC, package""",
         raise ToolError("The REQUIRES graph is empty; run the ingest first.")
     summary = "Most load-bearing packages (PageRank over REQUIRES): " + ", ".join(r["package"] for r in rows[:3]) + "."
     return Result(summary, rows, ["package", "pagerank", "services", "vulnerabilities"], None)
+
+
+SENSITIVE_ROUTES_CYPHER = """
+MATCH p = (:Ingress)<-[:EXPOSED_VIA]-(e:Service)-[:CALLS*0..4]->(s:Service)-[:READS]->(d:DataAsset)
+WHERE d.weight >= $weight
+RETURN [n IN nodes(p) WHERE n:Service | n.name] AS route, d.name AS asset, d.sensitivity AS sensitivity"""
+
+
+def choke_analysis(routes: list[dict], top: int = 3) -> dict:
+    """Pure function over the enumerated routes: which service carries the most paths to sensitive data, and what securing it removes.
+    'Secure X' means no attacker can pass through X: every route through X is cut."""
+    total = len(routes)
+    entry = {r["route"][0] for r in routes}
+    assets = {r["asset"] for r in routes}
+    names = {n for r in routes for n in r["route"]} - entry
+    rows = []
+    for svc in names:
+        cut = [r for r in routes if svc in r["route"]]
+        left = [r for r in routes if svc not in r["route"]]
+        protected = sorted(assets - {r["asset"] for r in left})
+        rows.append({"service": svc, "paths": len(cut), "of": total, "share": round(100 * len(cut) / total) if total else 0,
+                     "paths_removed": len(cut), "assets_protected": protected, "assets_still_reachable": sorted({r["asset"] for r in left}),
+                     "example": " → ".join(max(cut, key=lambda r: len(r["route"]))["route"])})
+    rows.sort(key=lambda r: (-r["paths"], -len(r["assets_protected"]), r["service"]))
+    return {"total": total, "assets": sorted(assets), "entry": sorted(entry), "rows": rows[:top]}
+
+
+@tool(
+    "choke_points",
+    "Choke points",
+    "Which internal service to secure first: for every service, how many internet-to-sensitive-data call paths (PCI/PII) pass through it, "
+    "and what securing it (cutting every route through it) would remove, from a counterfactual over the enumerated paths. "
+    "The entry service is excluded: it is the front door. Compared with exact betweenness from algo.SPpaths.",
+    [Param("limit", "integer", "How many services", default=3, minimum=1, maximum=10)],
+    "topology",
+    {"limit": 3},
+)
+def choke_points(trace: Trace, limit, graph_name=None):
+    routes = trace.ro(SENSITIVE_ROUTES_CYPHER, {"weight": 3}, graph_name)
+    a = choke_analysis(routes, limit)
+    if not a["rows"]:
+        return Result("No internet-reachable route reaches PCI/PII data through an internal service.", [], None, None)
+    btw = {r["service"]: round(r["score"], 1) for r in rank(trace, "betweenness", 30, graph_name).rows}
+    for r in a["rows"]:
+        r["betweenness"] = btw.get(r["service"])
+    top = a["rows"][0]
+    protects = f"; every route to {', '.join(top['assets_protected'])} goes through it" if top["assets_protected"] else f"; {', '.join(top['assets_still_reachable'])} stays reachable by another route"
+    summary = (
+        f"Secure {top['service']} first: it carries {top['paths']} of {a['total']} internet-to-sensitive-data call paths ({top['share']}%){protects}. "
+        f"Counted by path enumeration over CALLS (≤4 hops), entry service {', '.join(a['entry'])} excluded; exact betweenness is shown alongside as a cross-check."
+    )
+    cols = ["service", "paths", "of", "share", "assets_protected", "assets_still_reachable", "betweenness"]
+    return Result(summary, a["rows"], cols, None)

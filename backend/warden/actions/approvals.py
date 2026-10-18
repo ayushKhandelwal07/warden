@@ -5,7 +5,7 @@ import json
 import time
 import uuid
 
-from warden import config
+from warden import config, memory
 from warden.actions import github
 from warden.graph.client import ro, rw
 
@@ -67,11 +67,18 @@ def _finish(aid: str, status: str, result: dict, by: str, reason: str | None = N
     return get(aid)
 
 
+def set_preflight(aid: str, results: list[dict]) -> None:
+    """Keeps the pre-flight results on the approval payload so the detail view and the timeline can show them."""
+    a = get(aid)
+    payload = {**a["payload"], "preflight": {"at": _now(), "steps": results}}
+    rw("MATCH (a:Approval {id: $id}) SET a.payload_json = $p", {"id": aid, "p": json.dumps(payload)}, agents_graph())
+
+
 def reject(aid: str, reason: str, by: str = "you") -> dict:
     a = get(aid)
     if not a or a["status"] != "pending":
         raise ValueError("Only a pending approval can be rejected")
-    record_decision(a, "rejected", reason=reason, links=[])
+    record_decision(a, "rejected", reason=reason, links=[], by=by)
     return _finish(aid, "rejected", {"executed": False, "reason": reason}, by, reason)
 
 
@@ -82,7 +89,7 @@ def approve(aid: str, by: str = "you") -> dict:
     executor = EXECUTORS[a["kind"]]
     if not github.configured():
         result = {"executed": False, "reason": "GitHub fork not configured (GITHUB_TOKEN / GITHUB_OWNER in .env); nothing was sent."}
-        record_decision(a, "approved_not_executed", reason=result["reason"], links=[])
+        record_decision(a, "approved_not_executed", reason=result["reason"], links=[], by=by)
         return _finish(aid, "approved_not_executed", result, by)
     try:
         result = executor(a["payload"])
@@ -98,23 +105,24 @@ def approve(aid: str, by: str = "you") -> dict:
             msg = f"{type(e).__name__}: {msg[:240]}"
         rw("MATCH (a:Approval {id: $id}) SET a.last_error = $m, a.last_error_at = $t", {"id": aid, "m": msg, "t": _now()}, agents_graph())
         return get(aid)
-    record_decision(a, "approved", reason=None, links=[x["url"] for x in result.get("prs", [])] + ([result["url"]] if result.get("url") else []))
+    record_decision(a, "approved", reason=None, links=[x["url"] for x in result.get("prs", [])] + ([result["url"]] if result.get("url") else []), by=by)
     return _finish(aid, "approved", result, by)
 
 
-def record_decision(a: dict, status: str, reason: str | None, links: list[str]):
+def record_decision(a: dict, status: str, reason: str | None, links: list[str], by: str | None = None):
     """Decision node in the org graph: what was decided, about which vulnerabilities and services, and where it went."""
     p = a["payload"]
     vulns = sorted({v for it in p.get("items", []) for v in it.get("vulns", [])})
     services = sorted({s for it in p.get("items", []) for s in it.get("services", [])} | set(p.get("services", [])))
     rw(
         """CREATE (d:Decision {id: $id, kind: $kind, text: $text, status: $status, reason: $reason, decided_at: $t,
-            approval_id: $aid, links: $links, targets_json: $targets, source_type: 'warden'})
+            approval_id: $aid, links: $links, targets_json: $targets, items_json: $items, ingest_sha: $sha, decided_by: $by, source_type: 'warden'})
         WITH d UNWIND $vulns AS vid MATCH (v:Vulnerability {id: vid}) CREATE (d)-[:ABOUT]->(v)""",
         {"id": f"dec_{uuid.uuid4().hex[:10]}", "kind": a["kind"], "text": a["title"], "status": status, "reason": reason,
          "t": _now(), "aid": a["id"], "links": links, "vulns": vulns,
          # Exactly which (vulnerability, service) findings this decision promised to remove: verification checks these, no more.
-         "targets": json.dumps([[r["vuln"], r["service"]] for r in p.get("removed", [])])},
+         "targets": json.dumps([[r["vuln"], r["service"]] for r in p.get("removed", [])]),
+         "items": json.dumps(memory.items_of(p)), "sha": memory.ingest_sha(), "by": by},
     )
     if services:
         rw(

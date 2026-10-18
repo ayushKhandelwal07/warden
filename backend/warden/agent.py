@@ -36,6 +36,8 @@ Rules:
 - Prioritising = reachable_findings. What breaks = blast_radius (depth 3 shows indirect dependents). Reviewers =
   who_knows. Before recommending an action, call policies_for. Acting = propose_fix_plan or analyze_pr; both only
   file a pending approval that a human must approve.
+- "What if X became public / A stopped calling B / we upgraded P" = what_if (rehearsed on a copy, changes nothing). "Which service should we
+  secure first" = choke_points. "Which fix plan is best" = compare_plans (read-only; propose_fix_plan files one).
 - Reachability means "graph-reachable under the current topology model", not proven exploitable. Call something
   exploitable only if a result shows tier exploit_signal; KEV means known exploitation was reported, not that it
   happened here; EPSS is a likelihood estimate.
@@ -51,6 +53,29 @@ LOCAL_TOOLS = [
             "rehearses it on a copy of the graph, writes the file patches, and files it as a PENDING approval. "
             "Nothing is sent to GitHub until a human approves.",
             "parameters": {"type": "object", "properties": {"max_fixes": {"type": "integer", "minimum": 1, "maximum": 8, "default": 5}}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "what_if",
+            "description": "Counterfactual on a COPY of the graph (nothing real changes): apply hypothetical changes and report new or removed "
+            "internet-to-sensitive-data paths, risk before and after, and the best single counter-move. Use for 'what if X became public', "
+            "'what if A stopped calling B', 'what if we upgraded P'.",
+            "parameters": {"type": "object", "properties": {"changes": {"type": "array", "items": {"type": "object", "properties": {
+                "op": {"type": "string", "enum": ["expose", "unexpose", "remove_dep", "remove_call", "upgrade"]},
+                "service": {"type": "string"}, "package": {"type": "string"}, "from": {"type": "string"}, "to": {"type": "string"}},
+                "required": ["op"]}}}, "required": ["changes"]},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "compare_plans",
+            "description": "Four candidate remediation plans (fewest changes, safest, balanced, most risk removed), each rehearsed on its own copy "
+            "of the graph under optional constraints. Read-only: it files nothing.",
+            "parameters": {"type": "object", "properties": {"max_changes": {"type": "integer", "minimum": 1, "maximum": 8},
+                                                            "no_major": {"type": "boolean"}, "frozen_services": {"type": "array", "items": {"type": "string"}}}},
         },
     },
     {
@@ -145,8 +170,36 @@ async def _llm(messages: list[dict], tools: list[dict]) -> dict:
     raise RuntimeError("LLM rate limited")
 
 
+LOCAL_NAMES = {"propose_fix_plan", "analyze_pr", "what_if", "compare_plans"}
+
+
 async def _run_local(name: str, args: dict) -> dict:
-    """Action tools: they only create pending approvals."""
+    """Action tools: they only create pending approvals. what_if and compare_plans rehearse on copies and write nothing real."""
+    if name == "what_if":
+        from warden import counterfactual
+
+        try:
+            r = await asyncio.to_thread(counterfactual.what_if, args.get("changes") or [], True)
+        except ValueError as e:
+            return {"tool": name, "summary": None, "rows": [], "error": str(e), "queries": []}
+        best = (r["intervention"] or {}).get("best")
+        summary = (
+            f"If we {' and '.join(c['label'] for c in r['changes'])}: internet-to-sensitive-data paths {r['paths']['before']} → {r['paths']['after']}, "
+            f"total risk {r['risk']['before']} → {r['risk']['after']}, {len(r['new'])} new exposure(s). "
+            + (f"Best counter-move: {best['label']} (recovers {best['risk_recovered']} risk). " if best else "")
+            + f"Rehearsed on a graph copy. {r['assumption']}"
+        )
+        rows = [{"label": p[0] + " → " + p[1], "kind": "new path"} for p in r["paths"]["new"]] + [{"label": p[0] + " → " + p[1], "kind": "removed path"} for p in r["paths"]["removed"]]
+        return {"tool": name, "summary": summary, "columns": ["kind", "label"], "rows": rows, "error": None, "queries": []}
+    if name == "compare_plans":
+        from warden import optimizer
+
+        r = await asyncio.to_thread(optimizer.compare, args)
+        rows = [{"strategy": x["label"], "risk_removed": x.get("risk_removed"), "changes": x.get("changes"), "majors": x.get("majors"), "kev_left": x.get("residual_kev"),
+                 "gate": "passes" if x.get("gate") else ("blocked" if x.get("gate") is False else "n/a")} for x in r["rows"] if not x.get("empty") and not x.get("same_as")]
+        rec = next((x["label"] for x in r["rows"] if x.get("recommended")), None)
+        return {"tool": name, "summary": f"{len(rows)} distinct plan(s) rehearsed. " + (f"Recommended: {rec}." if rec else "No plan clears the gate and closes every KEV exposure under these constraints."),
+                "columns": list(rows[0]) if rows else None, "rows": rows, "error": None, "queries": []}
     if name == "propose_fix_plan":
         plan = await asyncio.to_thread(planner.build_plan, int(args.get("max_fixes") or 5))
         a, blocked = await asyncio.to_thread(proposals.file_fix_plan, plan, "agent", {"why": "Requested in chat"})
@@ -227,10 +280,10 @@ async def run_turn(question: str, history: list[dict] | None = None) -> AsyncIte
                     args = json.loads(c["function"].get("arguments") or "{}")
                 except ValueError:
                     args = {}
-                yield {"type": "tool_call", "id": c["id"], "tool": name, "args": args, "via": "local" if name in ("propose_fix_plan", "analyze_pr") else via}
+                yield {"type": "tool_call", "id": c["id"], "tool": name, "args": args, "via": "local" if name in LOCAL_NAMES else via}
                 t1 = time.perf_counter()
                 try:
-                    if name in ("propose_fix_plan", "analyze_pr"):
+                    if name in LOCAL_NAMES:
                         res = await _run_local(name, args)
                     elif use_mcp:
                         res = await MCP.call(name, args)

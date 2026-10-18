@@ -9,6 +9,7 @@ import time
 import uuid
 
 from warden import config
+from warden import timeline
 from warden.actions import approvals
 from warden.graph.client import copy_graph, delete_graph, graph_exists, ro, rw
 from warden.ingest import repo
@@ -128,6 +129,7 @@ def sync(ref: str) -> dict:
     res = ingest(ref, fetch=True, use_nvd=False, quiet=True)
     diff = diff_graphs(prev_graph(), config.org_graph_name())
     decisions = verify_decisions(diff)
+    timeline.record(diff, ref, res["sha"])
     record = {
         "id": f"sync_{uuid.uuid4().hex[:8]}", "from_ref": before_ref.get("ref"), "from_sha": before_ref.get("sha"),
         "to_ref": ref, "to_sha": res["sha"], "ms": round((time.perf_counter() - t0) * 1000), **diff, "decisions": decisions,

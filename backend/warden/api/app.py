@@ -17,7 +17,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 import yaml
 
-from warden import agent, config, conversations, db, impact, mcp_client, planner, proposals, sync, watch
+from warden import agent, config, conversations, db, impact, mcp_client, planner, proposals, replay, sync, watch
 from warden.api import accounts
 from warden.tools.base import ToolError
 from warden.actions import approvals, github, patches
@@ -121,9 +121,26 @@ def create_plan(body: dict = Body(default_factory=dict)):
     """Builds a remediation plan, rehearses it on a graph copy, writes the patches, and files it for approval."""
     try:
         max_fixes = max(1, min(8, int(body.get("max_fixes", 5))))
-        plan = planner.build_plan(max_fixes)
+        if body.get("variant"):  # a row picked in the plan comparison: rebuild exactly those upgrades, with its constraints
+            from warden import optimizer
+
+            chosen = optimizer.select(str(body["variant"]), {**(body.get("constraints") or {}), "max_changes": max_fixes})
+            plan = planner.build_plan(len(chosen), chosen_override=chosen) if chosen else planner.build_plan(max_fixes)
+        else:
+            plan = planner.build_plan(max_fixes)
         approval, blocked = proposals.file_fix_plan(plan, requested_by=accounts.user()["name"], trigger={"why": "Requested from the UI"})
         return {"approval": approval, "plan": plan, "blocked": blocked}
+    except Exception as e:
+        return JSONResponse(status_code=503, content={"error": f"{type(e).__name__}: {str(e)[:200]}"})
+
+
+@app.post("/api/plans/compare")
+def compare_plans(body: dict = Body(default_factory=dict)):
+    """Several constrained candidate plans, each rehearsed on its own graph copy, as a Pareto table."""
+    try:
+        from warden import optimizer
+
+        return optimizer.compare(body.get("constraints") or body)
     except Exception as e:
         return JSONResponse(status_code=503, content={"error": f"{type(e).__name__}: {str(e)[:200]}"})
 
@@ -201,7 +218,7 @@ def _start_turn(user_id: str, project_id: str, cid: str | None, question: str) -
 def _save_answer(user_id: str, project_id: str, cid: str, answer: str, events: list[dict]):
     with db.session() as s:
         conversations.add_message(s, user_id, project_id, cid, "assistant", answer,
-                                  {"events": json.loads(json.dumps(events, default=str))})
+                                  {"events": json.loads(json.dumps(events, default=str)), "snapshot": replay.snapshot()})
 
 
 @app.post("/api/ask")
@@ -253,6 +270,24 @@ def _conv_error(e: Exception):
 def list_conversations(kind: str = "ask"):
     with db.session() as s:
         return conversations.list_for(s, accounts.user()["id"], accounts.project()["id"], kind)
+
+
+@app.post("/api/replay/{cid}/{turn}")
+def replay_turn(cid: str, turn: int, body: dict = Body(default_factory=dict)):
+    """Re-runs the deterministic tool calls behind answer number `turn` (1-based) and reports same / changed per call."""
+    try:
+        with db.session() as s:
+            chat = conversations.get(s, accounts.user()["id"], accounts.project()["id"], cid)
+    except (conversations.NotFound, PermissionError) as e:
+        return _conv_error(e)
+    answers = [m for m in chat["messages"] if m["role"] == "assistant"]
+    if not 1 <= turn <= len(answers) or not (answers[turn - 1].get("data") or {}).get("events"):
+        return JSONResponse(status_code=404, content={"error": "No saved investigation for that answer."})
+    try:
+        against = "golden" if body.get("against") == "golden" else "current"
+        return {**replay.replay_turn(answers[turn - 1]["data"], against), "conversation": cid, "turn": turn}
+    except Exception as e:
+        return JSONResponse(status_code=503, content={"error": f"{type(e).__name__}: {str(e)[:200]}"})
 
 
 @app.get("/api/conversations/{cid}")
@@ -341,10 +376,30 @@ def run_sync(body: dict = Body(default_factory=dict)):
         return JSONResponse(status_code=503, content={"error": f"{type(e).__name__}: {str(e)[:200]}"})
 
 
+@app.get("/api/services")
+def list_services():
+    """Service names with their entry flag, callees and vulnerable package names, for the what-if builder."""
+    try:
+        from warden.graph.client import ro
+
+        rows, _ = ro(
+            """MATCH (s:Service)
+            OPTIONAL MATCH (s)-[:EXPOSED_VIA]->(i:Ingress) OPTIONAL MATCH (s)-[:CALLS]->(c:Service)
+            OPTIONAL MATCH (s)-[:DEPENDS_ON]->(p:Package)-[:AFFECTED_BY]->(:Vulnerability)
+            RETURN s.name AS name, count(DISTINCT i) > 0 AS entry, collect(DISTINCT c.name) AS calls, collect(DISTINCT p.name) AS packages ORDER BY name"""
+        )
+        return rows
+    except Exception as e:
+        return JSONResponse(status_code=503, content={"error": f"{type(e).__name__}: {str(e)[:200]}"})
+
+
 @app.post("/api/whatif")
 def what_if(body: dict = Body(default_factory=dict)):
     try:
-        return sync.what_if_expose(str(body.get("service") or ""))
+        from warden import counterfactual
+
+        changes = body.get("changes") or [{"op": "expose", "service": str(body.get("service") or "")}]
+        return {"service": body.get("service"), **counterfactual.what_if(changes, find_best=bool(body.get("find_best")))}
     except ValueError as e:
         return {"error": str(e)}
     except Exception as e:
@@ -370,6 +425,60 @@ def get_approval(aid: str):
     if not a:
         return JSONResponse(status_code=404, content={"error": "No such approval in this project."})
     return a
+
+
+def _fix_plan(aid: str) -> dict | None:
+    a = approvals.get(aid) if aid.startswith("apr_") else None
+    return a if a and a["kind"] == "fix_plan" else None
+
+
+@app.get("/api/approvals/{aid}/verification")
+def approval_verification(aid: str):
+    """Timeline from proposal to 'exposures gone', with PR checks and the graph-measured verdict."""
+    a = _fix_plan(aid)
+    if not a:
+        return JSONResponse(status_code=404, content={"error": "No such fix plan"})
+    try:
+        from warden import verification
+
+        return verification.build(a)
+    except Exception as e:
+        return JSONResponse(status_code=503, content={"error": f"{type(e).__name__}: {str(e)[:200]}"})
+
+
+@app.post("/api/approvals/{aid}/preflight")
+def approval_preflight(aid: str):
+    """Runs the real toolchain (go, npm) on a temp copy of each patched service; a missing tool is reported as skipped."""
+    a = _fix_plan(aid)
+    if not a:
+        return JSONResponse(status_code=404, content={"error": "No such fix plan"})
+    try:
+        from warden.actions import preflight
+
+        res = preflight.run(a["payload"].get("patches", []))
+        approvals.set_preflight(aid, res)
+        return {"preflight": {"steps": res}}
+    except Exception as e:
+        return JSONResponse(status_code=503, content={"error": f"{type(e).__name__}: {str(e)[:200]}"})
+
+
+@app.post("/api/approvals/{aid}/merge")
+def approval_merge(aid: str, body: dict = Body(default_factory=dict)):
+    """Merges one of this approval's PRs on our fork so the whole loop can be shown live. Fork only; needs an explicit click."""
+    a = _fix_plan(aid)
+    if not a or a["status"] != "approved":
+        return JSONResponse(status_code=400, content={"error": "Only an approved fix plan with open PRs can be merged."})
+    nums = {p["number"] for p in (a.get("result") or {}).get("prs", [])}
+    try:
+        n = int(body.get("pr"))
+    except (TypeError, ValueError):
+        return JSONResponse(status_code=400, content={"error": "Give the PR number."})
+    if n not in nums:
+        return JSONResponse(status_code=400, content={"error": "That PR does not belong to this approval."})
+    try:
+        return github.merge_pr(n)
+    except Exception as e:
+        return JSONResponse(status_code=502, content={"error": f"{type(e).__name__}: {str(e)[:200]}"})
 
 
 @app.post("/api/approvals/{aid}/approve")

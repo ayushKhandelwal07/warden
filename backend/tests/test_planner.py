@@ -131,3 +131,30 @@ def test_real_plan_records_regression_and_before_after_proof(plan):
     after_labels = {n["label"] for n in proof["after"]["nodes"]}
     assert "Package" in after_labels and "Vulnerability" not in after_labels  # same route, upgraded package, advisory gone
     assert plan["gate"]["passed"] and {c["level"] for c in plan["gate"]["checks"]} == {"block", "warn", "info"}
+
+
+def test_optimizer_rows_are_rehearsed_and_constraints_hold():
+    from warden import optimizer
+
+    out = optimizer.compare({"max_changes": 4, "no_major": True})
+    real = [r for r in out["rows"] if not r.get("empty") and not r.get("same_as")]
+    assert real and all(r["majors"] == 0 and r["changes"] <= 4 for r in real)
+    # The KEV fix (golang.org/x/net 0.x -> 0.60) is a major bump, so forbidding majors honestly leaves KEV open and the gate says so.
+    assert all(r["residual_kev"] > 0 and not r["gate"] for r in real) and out["recommended"] is None
+    free = optimizer.compare({})
+    rows = [r for r in free["rows"] if not r.get("empty") and not r.get("same_as")]
+    assert free["recommended"] in {r["id"] for r in rows if r["gate"] and r["residual_kev"] == 0}
+    assert not any(optimizer._dominates(o, r) for r in rows if r["pareto"] for o in rows if o is not r)
+    kev_only = next(r for r in free["rows"] if r["id"] == "kev_only")
+    assert kev_only["residual_kev"] == 0 and kev_only["changes"] <= 2
+
+
+def test_frozen_service_blocks_its_packages():
+    from warden import optimizer
+    from warden.tools.base import Trace
+    from warden.tools.security import scored_paths
+
+    paths = scored_paths(Trace())
+    chosen = optimizer.select("max_risk", {"frozen_services": ["frontend"]}, paths)
+    frozen_pkgs = {p["package_key"] for p in paths if p["service"] == "frontend"}
+    assert all(c["package_key"] not in frozen_pkgs for c in chosen)

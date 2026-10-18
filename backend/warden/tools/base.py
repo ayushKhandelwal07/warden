@@ -95,6 +95,26 @@ class Result:
     sources: list[str] = field(default_factory=list)
 
 
+# What each tool cannot answer without the connected graph (shown on the Tools page).
+WITHOUT_GRAPH = {
+    "pr_touched_services": "A flat list of changed files cannot say which services they belong to or what those services touch.",
+    "past_incidents": "Incidents in a ticket system are not linked to the services, commits and packages a change touches.",
+    "decisions_about": "Past approvals and rejections sit in chat or tickets, not attached to the package and service they concern.",
+    "who_owns": "Ownership lives in a separate file; it is not joined to the services a dependency or advisory affects.",
+    "who_knows": "Reviewer expertise needs commits joined to the files, services and PRs they touched.",
+    "policies_for": "A policy document has no link to the services, data and exposure it governs.",
+    "find_entity": "Free-text search cannot tell a service from a package or an advisory, or relate them.",
+    "reachable_findings": "A scanner lists advisories by severity; only the graph knows which are reachable from the internet and how far, and what data the service reads.",
+    "exploit_intel": "KEV and EPSS are per-advisory lists; the graph joins them to the services and packages they affect.",
+    "fix_path": "A lockfile does not say which direct dependency pulls in a transitive package; the REQUIRES chain does.",
+    "blast_radius": "Without CALLS edges there is no way to find the indirect dependents of a service.",
+    "path_between": "Shortest and alternative routes between two services need traversal, not lookups.",
+    "rank": "Choke points and load-bearing packages need graph algorithms (all-pairs paths, PageRank).",
+    "exposure_timeline": "A scanner shows today's list; it cannot say when an exposure opened or closed, or which decision and commit explain it.",
+    "choke_points": "Counting the internet-to-sensitive-data paths through each service, and what cutting them removes, needs path enumeration over CALLS.",
+}
+
+
 @dataclass
 class Tool:
     name: str
@@ -112,6 +132,7 @@ class Tool:
             "description": self.description,
             "category": self.category,
             "example": self.example,
+            "without_graph": WITHOUT_GRAPH.get(self.name),
             "params": [
                 {"name": p.name, "type": p.type, "description": p.description, "default": p.default,
                  "choices": p.choices, "required": p.required, "minimum": p.minimum, "maximum": p.maximum}

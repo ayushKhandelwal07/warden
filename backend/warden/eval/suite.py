@@ -196,10 +196,33 @@ def s_kev_vs_cvss(g):
     return _priority(g, "EVAL-10B in search", "EVAL-10B in search first: known exploitation (KEV) outranks a CRITICAL with no exploit signal at the same depth")
 
 
+def s_choke(g):
+    from warden.tools.topology import SENSITIVE_ROUTES_CYPHER, choke_analysis
+
+    pii = {"customer_email": (3, "PII"), "address": (3, "PII")}
+    build(g, _base({"frontend": [], "checkout": [], "payment": ["card_data"], "mail": ["customer_email"], "ship": ["address"]},
+                   calls=[("frontend", "checkout"), ("checkout", "payment"), ("checkout", "mail"), ("frontend", "ship")], assets={**CARD, **pii}))
+    trace = Trace()
+    a = choke_analysis(trace.ro(SENSITIVE_ROUTES_CYPHER, {"weight": 3}, g), 3)
+    top = a["rows"][0]
+    got = f"{top['service']} ({top['paths']} of {a['total']} paths)"
+    return {"trace": trace, "expected": "checkout first: 2 of 3 internet-to-sensitive-data paths go through it", "answer": got, "ok": top["service"] == "checkout" and top["paths"] == 2 and a["total"] == 3,
+            "baseline_ok": False, "baseline_answer": "has no path model; ranks services by their own highest CVSS, not by the paths through them"}
+
+
+def s_stale(g):
+    from warden import memory
+
+    d = {"id": "dec_eval", "status": "approved", "at": 1_000, "sha": "old-commit", "items": [{"package": "libx", "from": "1.0.0", "to": "2.0.0", "services": ["frontend"]}]}
+    versions = {"libx": {"frontend": {"1.0.0"}}}
+    same = memory.applies_now(d, versions, "old-commit", 2_000)["state"]
+    stale = memory.applies_now(d, versions, "new-commit", 2_000)["state"]
+    return {"trace": Trace(), "expected": "fresh on the same commit, stale (re-gated) once the graph is re-read from another commit", "answer": f"{same} on the same commit, {stale} on a new one",
+            "ok": (same, stale) == ("fresh", "stale"), "baseline_ok": False, "baseline_answer": "reuses the old approval as is; it has no memory of what the graph looked like"}
+
+
 PENDING = [
     ("contradiction", "Lockfile and Dockerfile disagree on a version", "Warden abstains and flags the contradiction", "Phase 1d: contradiction detection"),
-    ("choke_point", "One service carries most paths to card data", "choke_points names the right service", "Phase 3c: choke-point analysis"),
-    ("stale_decision", "A past approval no longer applies after a version change", "The plan is re-gated, not reused", "Phase 5a: decision memory"),
 ]
 
 SCENARIOS = [
@@ -213,6 +236,8 @@ SCENARIOS = [
     ("no_fix", "No fixed version published", "abstain", s_no_fix),
     ("close_cvss", "Nearly equal CVSS, different exposure and exploit signal", "priority", s_close_cvss),
     ("kev_vs_cvss", "KEV MEDIUM against a CRITICAL with no exploit signal", "priority", s_kev_vs_cvss),
+    ("choke_point", "One service carries most paths to card and personal data", "choke", s_choke),
+    ("stale_decision", "A past approval after the graph was re-read from another commit", "memory", s_stale),
 ]
 
 
@@ -274,7 +299,7 @@ def run() -> dict:
         "pending": [{"id": i, "title": t, "expected": e, "unlocks": u, "status": "pending"} for i, t, e, u in PENDING],
         "metrics": {
             "reachability": {"warden": pr(reach["w"]), "baseline": pr(reach["b"])},
-            "priority": cat("priority"), "gate": cat("gate"), "abstain": cat("abstain"),
+            "priority": cat("priority"), "gate": cat("gate"), "abstain": cat("abstain"), "choke": cat("choke"), "memory": cat("memory"),
             "overall": {"n": len(ran), "warden": sum(r["warden"]["ok"] for r in ran), "baseline": sum(r["baseline"]["ok"] for r in ran)},
             "latency_ms": {"queries": len(lat), "p50": _percentile(lat, 0.5), "p95": _percentile(lat, 0.95)},
         },

@@ -136,3 +136,28 @@ def test_every_hop_of_the_hero_path_has_provenance_and_calls_are_marked_inferred
     from warden.graph.evidence import provenance
 
     assert provenance("CALLS", {"via": "grpc", "env_var": "X_ADDR"})["kind"] == "inferred"
+
+
+def test_choke_points_pure_counts_and_counterfactual():
+    from warden.tools.topology import choke_analysis
+
+    routes = [
+        {"route": ["fe", "co", "pay"], "asset": "Card"},
+        {"route": ["fe", "co"], "asset": "Card"},
+        {"route": ["fe", "co", "mail"], "asset": "Email"},
+        {"route": ["fe", "ship"], "asset": "Addr"},
+    ]
+    a = choke_analysis(routes, 3)
+    top = a["rows"][0]
+    assert a["total"] == 4 and top["service"] == "co" and top["paths"] == 3 and top["assets_protected"] == ["Card", "Email"]
+    assert top["assets_still_reachable"] == ["Addr"] and "fe" not in {r["service"] for r in a["rows"]}
+
+
+def test_choke_points_tool_on_the_demo_graph():
+    r = run_tool("choke_points", {"limit": 3})
+    assert not r["error"] and r["rows"][0]["service"] == "checkoutservice" and r["rows"][0]["paths"] > r["rows"][1]["paths"]
+    assert "Secure checkoutservice first" in r["summary"]
+
+
+def test_every_tool_says_what_it_cannot_do_without_the_graph():
+    assert all(t.meta()["without_graph"] for t in REGISTRY.values())
