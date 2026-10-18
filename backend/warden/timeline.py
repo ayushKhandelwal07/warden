@@ -6,6 +6,7 @@ The live graph always describes *now* (a fixed vulnerability is gone from it, ne
   - the Decision nodes (made, verified, stale) and the CISA KEV listing date on the Vulnerability.
 `events()` merges them, newest first. Incidents and past decisions are historical facts and are never rewritten.
 """
+import calendar
 import time
 import uuid
 
@@ -68,7 +69,7 @@ def merge_events(ledger: list[dict], decisions: list[dict], kev: dict | None, st
 
 def kev_added_ms(date: str | None) -> int | None:
     try:
-        return int(time.mktime(time.strptime(str(date)[:10], "%Y-%m-%d")) * 1000)
+        return int(calendar.timegm(time.strptime(str(date)[:10], "%Y-%m-%d")) * 1000)
     except (TypeError, ValueError):
         return None
 

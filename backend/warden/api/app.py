@@ -376,6 +376,17 @@ def run_sync(body: dict = Body(default_factory=dict)):
         return JSONResponse(status_code=503, content={"error": f"{type(e).__name__}: {str(e)[:200]}"})
 
 
+@app.post("/api/demo/seed")
+def demo_seed():
+    """Adds the labelled demo history (a rejected upgrade, a pending rehearsed plan, a verified fix) if it is not there yet."""
+    try:
+        from warden import demo_seed as seed
+
+        return seed.seed()
+    except Exception as e:
+        return JSONResponse(status_code=503, content={"error": f"{type(e).__name__}: {str(e)[:200]}"})
+
+
 @app.get("/api/contradictions")
 def get_contradictions(status: str = "open"):
     """Evidence contradictions stored in the graph (open by default)."""
@@ -394,6 +405,18 @@ def scan_contradictions():
         from warden import contradictions
 
         return {**contradictions.scan(), "items": contradictions.listing()}
+    except Exception as e:
+        return JSONResponse(status_code=503, content={"error": f"{type(e).__name__}: {str(e)[:200]}"})
+
+
+@app.get("/api/surface")
+def get_surface():
+    """The attack surface map: services by hop distance, risk per service, sensitive data, the KEV route and the enumerated data routes."""
+    try:
+        from warden import cache, surface
+
+        body, _hit = cache.cached("surface", {}, surface.build)
+        return body
     except Exception as e:
         return JSONResponse(status_code=503, content={"error": f"{type(e).__name__}: {str(e)[:200]}"})
 
@@ -550,12 +573,59 @@ def public_overview():
         return hit[1]
     token = config.CURRENT_GRAPH.set(None)  # the demo graph, whoever is asking
     try:
-        body = {"totals": overview.totals(), "hero": overview.kev_hero(), "health": overview.health(), "funnel": overview.funnel(), "baseline": __import__("warden.baseline", fromlist=["compare"]).compare()}
+        from warden.tools import REGISTRY
+
+        body = {"totals": overview.totals(), "hero": overview.kev_hero(), "health": overview.health(), "funnel": overview.funnel(),
+                "baseline": __import__("warden.baseline", fromlist=["compare"]).compare(), "tools": len(REGISTRY)}
     except Exception as e:
         return JSONResponse(status_code=503, content={"error": str(e)[:200]})
     finally:
         config.CURRENT_GRAPH.reset(token)
     _PUBLIC_CACHE["v"] = (time.time(), body)
+    return body
+
+
+@app.get("/api/public/surface")
+def public_surface():
+    """The attack surface map of the shared demo graph for the landing page (read-only, cached 60 s)."""
+    hit = _PUBLIC_CACHE.get("surface")
+    if hit and time.time() - hit[0] < 60:
+        return hit[1]
+    token = config.CURRENT_GRAPH.set(None)
+    try:
+        from warden import surface
+
+        body = surface.build()
+    except Exception as e:
+        return JSONResponse(status_code=503, content={"error": str(e)[:200]})
+    finally:
+        config.CURRENT_GRAPH.reset(token)
+    _PUBLIC_CACHE["surface"] = (time.time(), body)
+    return body
+
+
+_PLAN_CACHE: dict = {}
+
+
+@app.get("/api/public/plan")
+def public_plan():
+    """The default 5-upgrade plan on the demo graph, rehearsed once and cached (it only feeds the landing page's numbers)."""
+    hit = _PLAN_CACHE.get("v")
+    if hit and time.time() - hit[0] < 900:
+        return hit[1]
+    token = config.CURRENT_GRAPH.set(None)
+    try:
+        p = planner.build_plan(5)
+        b, a = p["before"], p["after"]
+        body = {"upgrades": len(p["items"]), "services": len({s for i in p["items"] for s in i["services"]}), "service_names": sorted({s for i in p["items"] for s in i["services"]}),
+                "risk_pct": round(100 * (b["risk"] - a["risk"]) / b["risk"]) if b["risk"] else 0,
+                "exposures": {"before": b["findings"], "after": a["findings"]}, "kev": {"before": b["kev_findings"], "after": a["kev_findings"]},
+                "gate_passed": p["gate"]["passed"]}
+    except Exception as e:
+        return JSONResponse(status_code=503, content={"error": str(e)[:200]})
+    finally:
+        config.CURRENT_GRAPH.reset(token)
+    _PLAN_CACHE["v"] = (time.time(), body)
     return body
 
 

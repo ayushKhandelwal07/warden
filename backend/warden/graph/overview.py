@@ -19,7 +19,10 @@ def health() -> dict:
     edges, _ = ro("MATCH ()-[r]->() RETURN count(r) AS n")
     run, _ = ro("MATCH (r:IngestRun) RETURN r.ref AS ref, r.sha AS sha, r.at AS at ORDER BY r.at DESC LIMIT 1")
     kev, _ = ro("MATCH (c:Catalog {name: 'CISA KEV'}) RETURN c.catalog_version AS version, c.released AS released, c.entries AS entries")
+    from warden import cache, config
+
     return {
+        "graph_version": cache.version(config.org_graph_name()),
         "nodes": nodes[0]["n"],
         "edges": edges[0]["n"],
         "ingest": run[0] if run else None,

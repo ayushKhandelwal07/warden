@@ -159,7 +159,7 @@ RETURN d.id AS id, d.status AS status, d.text AS text, d.reason AS reason, d.dec
         head = f"{vid} is {state}: {len(active)} reachable exposure(s) now, {len(closed)} closed over the recorded history."
     else:
         head = f"{svc}: {len(active)} reachable exposure(s) now, {len(closed)} closed and {sum(1 for e in ledger if e['kind'] == 'exposure_opened')} opened in the recorded history."
-    rows = [{"when": _date(e["at"]), "kind": e["kind"], "what": e["detail"]} for e in events]
+    rows = [{"when": (_date(e["at"]) or "")[:10] if e["kind"] == "kev_listed" else _date(e["at"]), "kind": e["kind"], "what": e["detail"]} for e in events]
     if not rows:
         return Result(head + " No events recorded yet (history starts at the first sync).", [], None, None)
     return Result(head + f" Latest: {rows[0]['kind']}: {rows[0]['what']}.", rows, ["when", "kind", "what"], None)

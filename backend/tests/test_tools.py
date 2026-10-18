@@ -161,3 +161,21 @@ def test_choke_points_tool_on_the_demo_graph():
 
 def test_every_tool_says_what_it_cannot_do_without_the_graph():
     assert all(t.meta()["without_graph"] for t in REGISTRY.values())
+
+
+def test_surface_kev_route_is_the_shortest_call_chain():
+    from warden.surface import kev_edges
+
+    calls = [("fe", "co"), ("co", "pay"), ("fe", "pay2"), ("pay2", "pay")]
+    assert kev_edges(["fe"], calls, {"pay"}) == [("co", "pay"), ("fe", "co")] or kev_edges(["fe"], calls, {"pay"}) == [("fe", "pay2"), ("pay2", "pay")]
+    assert kev_edges(["fe"], calls, {"nope"}) == []
+
+
+def test_surface_endpoint_shape_on_the_demo_graph():
+    from warden import surface
+
+    s = surface.build()
+    names = {x["name"]: x for x in s["services"]}
+    assert len(names) == 12 and names["frontend"]["entry"] and names["frontend"]["hops"] == 0 and names["frontend"]["kev"]
+    assert any(e["to"] == "checkoutservice" for e in s["kev_path"]) and len(s["routes"]) == 7
+    assert {a["name"] for a in s["assets"]} == {"CardData", "CustomerEmail", "ShippingAddress"} and s["max_risk"] > 0

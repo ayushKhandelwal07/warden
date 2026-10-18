@@ -184,4 +184,10 @@ def reset() -> dict:
     delete_graph(approvals.agents_graph())
     delete_graph(prev_graph())
     repo.ensure_repo(config.DEMO_REF)
-    return {"reset": True, **current_ref()}
+    try:  # the clean demo state includes the labelled demo history
+        from warden import demo_seed
+
+        seeded = demo_seed.seed()
+    except Exception:
+        seeded = {"created": [], "error": True}
+    return {"reset": True, **current_ref(), "demo_history": seeded}
