@@ -23,6 +23,9 @@ LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.groq.com/openai/v1").rstri
 LLM_API_KEY = os.getenv("LLM_API_KEY") or None
 LLM_MODEL = os.getenv("LLM_MODEL", "openai/gpt-oss-120b")
 
+# Where the Warden UI is served; PR comments and PR bodies link back to it.
+WARDEN_URL = os.getenv("WARDEN_URL", "http://localhost:5173").rstrip("/")
+
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN") or None
 GITHUB_OWNER = os.getenv("GITHUB_OWNER") or None
 GITHUB_REPO = os.getenv("GITHUB_REPO", "microservices-demo")

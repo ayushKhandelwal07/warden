@@ -92,7 +92,7 @@ def approve(aid: str, by: str = "you") -> dict:
         record_decision(a, "approved_not_executed", reason=result["reason"], links=[], by=by)
         return _finish(aid, "approved_not_executed", result, by)
     try:
-        result = executor(a["payload"])
+        result = executor({**a["payload"], "approval_id": a["id"]})
         result["executed"] = True
     except Exception as e:
         # Keep it pending so the human can fix the cause and approve again; show what went wrong.
@@ -134,6 +134,11 @@ def record_decision(a: dict, status: str, reason: str | None, links: list[str], 
 
 # ---- executors: one per action kind ----
 
+def _warden_link(payload: dict) -> str:
+    """The approval's own page (it shows the diff, the gate, the before/after graph and the timeline). The UI redirects to the right project."""
+    return f"{config.WARDEN_URL}/approvals/{payload['approval_id']}" if payload.get("approval_id") else config.WARDEN_URL
+
+
 def _exec_fix_plan(payload: dict) -> dict:
     prs = []
     stamp = time.strftime("%Y%m%d-%H%M%S")
@@ -156,6 +161,8 @@ def _exec_fix_plan(payload: dict) -> dict:
                 f"{payload['before']['kev_findings']} → {payload['after']['kev_findings']}.",
                 "",
                 "Lockfiles are not regenerated here: run `go mod tidy` / `npm install` in CI before merging.",
+                "",
+                f"Evidence, gate results and the proof timeline: {_warden_link(payload)}",
             ]
         )
         prs.append(
@@ -168,7 +175,7 @@ def _exec_pr_comment(payload: dict) -> dict:
     """Posts the impact report on the fork PR, labels its risk, and requests reviewers from the owning teams
     (fork collaborators listed in teams.yaml only; real upstream people are never requested or mentioned)."""
     n = payload["pr"]
-    c = github.comment(n, payload["comment"])
+    c = github.comment(n, f"{payload['comment']}\n\n---\nFull analysis and evidence in Warden: {_warden_link(payload)}")
     github.add_labels(n, [f"risk: {payload['risk']}"])
     req = github.request_reviewers(n, payload.get("reviewers", []))
     return {"url": c["url"], "labels": [f"risk: {payload['risk']}"], "reviewers": req["requested"]}
