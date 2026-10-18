@@ -48,13 +48,17 @@ type Props = {
   evidence: Evidence;
   highlight?: Set<string>;
   onSelect?: (node: EvidenceNode | null) => void;
+  /** Edge ids drawn dashed and muted (they disappear after a fix). */
+  removed?: Set<string>;
+  /** Edge ids drawn in the accent colour (they appear after a change). */
+  added?: Set<string>;
   /** Fixed canvas height in px. Default: fits the drawing. */
   height?: number;
   /** Hide the caption and legend (tiny embeds). */
   bare?: boolean;
 };
 
-function Canvas({ evidence, highlight, onSelect, height, fullscreen }: Props & { fullscreen: boolean }) {
+function Canvas({ evidence, highlight, onSelect, height, fullscreen, removed, added }: Props & { fullscreen: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(800);
   const vertical = width < 640;
@@ -87,7 +91,7 @@ function Canvas({ evidence, highlight, onSelect, height, fullscreen }: Props & {
           position: positions?.get(n.id),
         })),
         ...evidence.edges.map((e) => ({
-          data: { id: e.id, source: e.source, target: e.target, label: vertical ? "" : e.type.replace(/_/g, " ").toLowerCase(), path: onPath.has(e.source) && onPath.has(e.target) ? 1 : 0 },
+          data: { id: e.id, source: e.source, target: e.target, label: vertical ? "" : e.type.replace(/_/g, " ").toLowerCase(), path: onPath.has(e.source) && onPath.has(e.target) ? 1 : 0, gone: removed?.has(e.id) ? 1 : 0, add: added?.has(e.id) ? 1 : 0 },
         })),
       ],
       layout: ordered ? { name: "preset" } : { name: "breadthfirst", directed: true, spacingFactor: 1.15 },
@@ -119,6 +123,8 @@ function Canvas({ evidence, highlight, onSelect, height, fullscreen }: Props & {
           },
         },
         { selector: "edge[path = 1]", style: { width: 2, "line-color": accent, "target-arrow-color": accent } },
+        { selector: "edge[gone = 1]", style: { width: 2, "line-style": "dashed", "line-color": muted, "target-arrow-color": muted } },
+        { selector: "edge[add = 1]", style: { width: 3, "line-color": "#d92d20", "target-arrow-color": "#d92d20" } },
       ],
     });
 
@@ -158,7 +164,7 @@ function Canvas({ evidence, highlight, onSelect, height, fullscreen }: Props & {
       cy.destroy();
     };
     // Rebuild when the evidence changes or the layout mode flips (phone <-> desktop), not on every pixel of resize.
-  }, [evidence, highlight, onSelect, height, vertical, fullscreen]);
+  }, [evidence, highlight, onSelect, height, vertical, fullscreen, removed, added]);
 
   return (
     <div

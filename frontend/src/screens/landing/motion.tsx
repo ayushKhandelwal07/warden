@@ -72,10 +72,10 @@ export function Reveal({ children, delay = 0, className = "", as: Tag = "div" }:
 /** Counts up to `to` the first time it's visible. */
 export function CountUp({ to, duration = 1200, suffix = "", className = "" }: { to: number; duration?: number; suffix?: string; className?: string }) {
   const [ref, seen] = useInView<HTMLSpanElement>();
-  const [v, setV] = useState(0);
+  const [v, setV] = useState(to);
   useEffect(() => {
-    if (!seen) return;
-    if (reducedMotion()) return setV(to);
+    setV(to);
+    if (!seen || reducedMotion()) return;
     const t0 = performance.now();
     let raf = requestAnimationFrame(function step(t) {
       const k = Math.min(1, (t - t0) / duration);

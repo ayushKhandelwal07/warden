@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import {
   ArrowLeft,
@@ -24,13 +24,15 @@ import {
   X,
 } from "lucide-react";
 import { Logo } from "../components/Chrome";
+import { AttackSurfaceMap } from "../components/AttackSurfaceMap";
 import { PathGraph } from "../components/PathGraph";
 import { API_BASE, type Baseline, type Health, type Overview } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { CountUp, Reveal, ScrollWords, reducedMotion, useInView, useScrollProgress, useScrolled, useTicker } from "./landing/motion";
 import "./landing/landing.css";
 
-type PublicOverview = Overview & { health: Health; baseline: Baseline };
+type PublicPlan = { upgrades: number; services: number; service_names: string[]; risk_pct: number; exposures: { before: number; after: number }; kev: { before: number; after: number }; gate_passed: boolean };
+type PublicOverview = Overview & { health: Health; baseline: Baseline; tools?: number };
 
 /** The project's public repo; links are hidden until VITE_REPO_URL is set. */
 const REPO = (import.meta.env.VITE_REPO_URL as string | undefined) ?? "";
@@ -49,6 +51,16 @@ function usePublicOverview() {
       .then(setData, () => setData(null));
   }, []);
   return data;
+}
+
+function usePublicPlan() {
+  const [plan, setPlan] = useState<PublicPlan | null | undefined>(undefined);
+  useEffect(() => {
+    fetch(API_BASE + "/api/public/plan", { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setPlan, () => setPlan(null));
+  }, []);
+  return plan;
 }
 
 function Pill({ to, href, dark, big, children, onClick }: { to?: string; href?: string; dark?: boolean; big?: boolean; children: ReactNode; onClick?: () => void }) {
@@ -298,12 +310,12 @@ function Hero({ app, signedIn }: { app: string; signedIn: boolean }) {
     <section className="lp-glow relative">
       <div className="mx-auto max-w-[980px] px-5 pb-12 pt-12 text-center sm:pt-16">
         <h1 className="lp-rise text-[44px] font-semibold leading-[1.08] tracking-[-0.035em] sm:text-[62px] lg:text-[75px]">
-          AI that fixes what
-          <br className="hidden sm:block" /> attackers can reach
+          Know which vulnerabilities
+          <br className="hidden sm:block" /> attackers can really reach
         </h1>
         <p className="lp-rise mx-auto mt-6 max-w-[640px] text-[18px] font-semibold leading-[1.45] tracking-[-0.018em] text-ink/50 sm:text-[21px]" style={{ animationDelay: "120ms" }}>
           Warden traces every vulnerability through a graph of your services, code and people.{" "}
-          <span className="text-ink">It only says what it can prove, and only acts with your approval.</span>
+          <span className="text-ink">No path, no claim. It only acts with your approval.</span>
         </p>
         <div className="lp-rise mt-9 flex flex-wrap items-center justify-center gap-3" style={{ animationDelay: "240ms" }}>
           <Pill to={app} dark big>
@@ -419,7 +431,8 @@ const CHAIN = [
   { k: "CVE", v: "CVE-2023-44487", accent: true },
 ];
 
-function StoryPanel({ step }: { step: number }) {
+function StoryPanel({ step, data, plan }: { step: number; data: PublicOverview | null | undefined; plan: PublicPlan | null | undefined }) {
+  const top = data?.baseline?.graph_top?.slice(0, 4);
   return (
     <div key={step} className="rise-in flex h-full flex-col justify-center gap-5 p-6 sm:p-10">
       {step === 0 && (
@@ -435,12 +448,7 @@ function StoryPanel({ step }: { step: number }) {
       )}
       {step === 1 && (
         <div className="flex flex-col divide-y divide-line rounded-2xl border border-line">
-          {[
-            ["CVE-2023-44487", "frontend", "0 hops", "48.3", true],
-            ["CVE-2023-44487", "checkoutservice", "1 hop", "34.5", true],
-            ["CVE-2023-45288", "frontend", "0 hops", "34.4", false],
-            ["CVE-2023-44487", "shippingservice", "1 hop", "27.6", true],
-          ].map(([cve, svc, hops, risk, kev], k) => (
+          {(top ?? []).map((r) => [r.vuln, r.service, `${r.hops} hop${r.hops === 1 ? "" : "s"}`, String(r.risk), r.kev] as const).map(([cve, svc, hops, risk, kev], k) => (
             <div key={k} className="lp-hop flex items-center gap-3 px-4 py-3 text-[13px]" style={{ animationDelay: `${k * 120}ms` }}>
               <span className="w-5 text-muted tabular-nums">{k + 1}</span>
               <span className="font-mono">{cve}</span>
@@ -450,15 +458,19 @@ function StoryPanel({ step }: { step: number }) {
               <span className="w-12 text-right font-semibold tabular-nums">{risk}</span>
             </div>
           ))}
+          {!top && <p className="px-4 py-3 text-[13px] text-muted">Demo data unavailable.</p>}
           <p className="px-4 py-3 text-[12px] text-muted">risk = severity × exploit (KEV, EPSS) × exposure (0.5^hops) × data</p>
         </div>
       )}
       {step === 2 && (
         <div className="grid grid-cols-2 gap-3">
-          {[
-            ["Reachable exposures", "681", "233"],
-            ["KEV exposures", "4", "0"],
-          ].map(([k, a, b]) => (
+          {(plan
+            ? [
+                ["Reachable exposures", String(plan.exposures.before), String(plan.exposures.after)],
+                ["KEV exposures", String(plan.kev.before), String(plan.kev.after)],
+              ]
+            : []
+          ).map(([k, a, b]) => (
             <div key={k} className="rounded-2xl border border-line p-4">
               <p className="text-[12px] text-muted">{k}</p>
               <p className="mt-2 flex items-baseline gap-2 text-[28px] font-semibold tabular-nums">
@@ -469,7 +481,13 @@ function StoryPanel({ step }: { step: number }) {
             </div>
           ))}
           <p className="col-span-2 rounded-2xl bg-code px-4 py-3 text-[13px]">
-            <span className="font-semibold text-ok">Gate passed:</span> risk drops, KEV eliminated, no new KEV or CRITICAL on upgraded versions.
+            {plan ? (
+              <>
+                <span className={`font-semibold ${plan.gate_passed ? "text-ok" : "text-accent"}`}>{plan.gate_passed ? "Gate passed:" : "Gate blocked:"}</span> measured by rehearsing on a copy of the graph, not estimated.
+              </>
+            ) : (
+              "Rehearsing the default plan on a graph copy…"
+            )}
           </p>
         </div>
       )}
@@ -478,7 +496,7 @@ function StoryPanel({ step }: { step: number }) {
           <p className="flex items-center gap-2 text-[12px] text-muted">
             <span className="h-2 w-2 rounded-full bg-accent" /> Waiting for you · fix plan
           </p>
-          <p className="mt-2 text-[18px] font-semibold tracking-[-0.01em]">Upgrade 5 packages across 6 services</p>
+          <p className="mt-2 text-[18px] font-semibold tracking-[-0.01em]">{plan ? `Upgrade ${plan.upgrades} packages across ${plan.services} services` : "Upgrade packages across services"}</p>
           <p className="mt-1 text-[13px] text-muted">Covers every CISA KEV path. Measured on a copy of the graph, not estimated.</p>
           <div className="mt-4 flex gap-2">
             <span className="lp-hop inline-flex h-10 items-center gap-2 rounded-full bg-ink px-4 text-[13px] font-semibold text-white" style={{ animationDelay: "500ms" }}>
@@ -490,11 +508,11 @@ function StoryPanel({ step }: { step: number }) {
       )}
       {step === 4 && (
         <div className="flex flex-col gap-2">
-          {["checkoutservice", "frontend", "productcatalogservice", "shippingservice"].map((s, k) => (
+          {(plan?.service_names ?? []).map((s, k) => (
             <div key={s} className="lp-hop flex items-center gap-3 rounded-2xl border border-line px-4 py-3 text-[13px]" style={{ animationDelay: `${k * 180}ms` }}>
               <GitPullRequest size={15} className="text-ok" />
               <span className="font-medium">Security upgrades for {s}</span>
-              <span className="ml-auto font-mono text-muted">#{5 + k}</span>
+              <span className="ml-auto text-muted">proposed</span>
             </div>
           ))}
         </div>
@@ -514,7 +532,7 @@ function StoryPanel({ step }: { step: number }) {
   );
 }
 
-function Story() {
+function Story({ data, plan }: { data: PublicOverview | null | undefined; plan: PublicPlan | null | undefined }) {
   const [ref, p] = useScrollProgress<HTMLDivElement>();
   const [boxRef, seen] = useInView<HTMLDivElement>("0px");
   const pinned = typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches;
@@ -543,7 +561,7 @@ function Story() {
           </div>
           <div ref={boxRef} className="lp-card relative overflow-hidden rounded-[28px]">
             <div className="h-[380px] sm:h-[420px]">
-              <StoryPanel step={step} />
+              <StoryPanel step={step} data={data} plan={plan} />
             </div>
             <div className="pointer-events-none absolute inset-x-0 bottom-5 flex justify-center px-4">
               <span key={step} className="rise-in rounded-full bg-ink px-5 py-2.5 text-center text-[15px] font-semibold text-white shadow-window sm:text-[17px]">
@@ -564,16 +582,21 @@ function Story() {
 
 /* ───────────────────────────── Use cases carousel ───────────────────────────── */
 
-const USE_CASES = [
+type Chip = { icon: typeof Radar; n: number | null; label?: (n: number) => string; text?: string };
+type UseCase = { who: string; path: string[]; call: string; body: string; chips: Chip[]; to: string };
+
+function useCases(data: PublicOverview | null | undefined, plan: PublicPlan | null | undefined): UseCase[] {
+  const fn = (key: string) => data?.funnel?.stages?.find((x) => x.key === key)?.n ?? null;
+  return [
   {
     who: "For security teams",
     path: ["Internet", "frontend", "CVE-2023-44487"],
     call: "reachable_findings()",
     body: "Start the week with the one finding that matters, the path that proves it and the fix that removes it.",
     chips: [
-      { icon: ScanSearch, n: 256, label: (n: number) => `Scanned ${n} advisories` },
-      { icon: Radar, n: 239, label: (n: number) => `Traced ${n} reachable` },
-      { icon: ShieldCheck, n: 1, label: (n: number) => `Flagged ${n} on CISA KEV` },
+      { icon: ScanSearch, n: fn("present"), label: (n: number) => `Scanned ${n} advisories` },
+      { icon: Radar, n: fn("reachable"), label: (n: number) => `${n} graph-reachable` },
+      { icon: ShieldCheck, n: fn("kev"), label: (n: number) => `${n} on CISA KEV` },
     ],
     to: "/ask?q=What%20should%20we%20fix%20first%3F",
   },
@@ -583,9 +606,9 @@ const USE_CASES = [
     call: "propose_fix_plan(max_fixes=5)",
     body: "Get the fewest upgrades that remove the most risk, rehearsed on a graph copy before any PR is opened.",
     chips: [
-      { icon: Sparkles, n: 5, label: (n: number) => `Picked ${n} upgrades` },
-      { icon: Network, n: 74, label: (n: number) => `Removed ${n}% of risk` },
-      { icon: GitPullRequest, n: 4, label: (n: number) => `Opened ${n} PRs` },
+      { icon: Sparkles, n: plan?.upgrades ?? null, label: (n: number) => `Picked ${n} upgrades` },
+      { icon: Network, n: plan?.risk_pct ?? null, label: (n: number) => `Removes ${n}% of risk` },
+      { icon: GitPullRequest, n: plan?.services ?? null, label: (n: number) => `One PR per service (${n})` },
     ],
     to: "/ask?q=Make%20a%20fix%20plan%20for%20the%20riskiest%20findings",
   },
@@ -595,9 +618,9 @@ const USE_CASES = [
     call: "analyze_pr(pr=1789)",
     body: "Before you merge, see what a PR touches, what breaks three hops away and who has changed this code before.",
     chips: [
-      { icon: Network, n: 3, label: (n: number) => `Found ${n} dependents` },
-      { icon: Users, n: 4, label: (n: number) => `Suggested ${n} reviewers` },
-      { icon: MessageSquare, n: 1, label: (n: number) => `Drafted ${n} impact report` },
+      { icon: Network, n: null, text: "Dependents at 1 and 3 hops" },
+      { icon: Users, n: null, text: "Reviewers from commit history" },
+      { icon: MessageSquare, n: null, text: "Past incidents matched" },
     ],
     to: "/impact",
   },
@@ -607,15 +630,16 @@ const USE_CASES = [
     call: 'decisions_about("frontend")',
     body: "Every approval and rejection is a decision in the graph, and the watcher checks each one after the next release.",
     chips: [
-      { icon: Inbox, n: 7, label: (n: number) => `Reviewed ${n} proposals` },
-      { icon: ShieldCheck, n: 3, label: (n: number) => `Recorded ${n} decisions` },
-      { icon: Radar, n: 30, label: (n: number) => `Watching every ${n}s` },
+      { icon: Inbox, n: null, text: "Approvals and rejections kept" },
+      { icon: ShieldCheck, n: null, text: "Rejected upgrades are not proposed again" },
+      { icon: Radar, n: null, text: "Checked against the next release" },
     ],
     to: "/approvals",
   },
-];
+  ];
+}
 
-function UseCaseCard({ c, app }: { c: (typeof USE_CASES)[number]; app: (p: string) => string }) {
+function UseCaseCard({ c, app }: { c: UseCase; app: (p: string) => string }) {
   const [ref, seen] = useInView<HTMLDivElement>("0px");
   return (
     <div ref={ref} className="lp-card flex w-[290px] shrink-0 snap-start flex-col rounded-[22px] sm:w-[360px]">
@@ -648,7 +672,7 @@ function UseCaseCard({ c, app }: { c: (typeof USE_CASES)[number]; app: (p: strin
               style={{ transitionDelay: `${300 + k * 180}ms` }}
             >
               <ch.icon size={14} className="shrink-0 text-muted" />
-              <span className="min-w-0 flex-1 truncate">{seen ? <CountLabel n={ch.n} render={ch.label} /> : ch.label(0)}</span>
+              <span className="min-w-0 flex-1 truncate">{ch.text ? ch.text : ch.n === null || !ch.label ? "Loading the demo graph…" : seen ? <CountLabel n={ch.n} render={ch.label} /> : ch.label(ch.n)}</span>
               <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${seen ? "bg-ok" : "bg-line"} transition-colors duration-700`} style={{ transitionDelay: `${1000 + k * 180}ms` }} />
             </span>
           ))}
@@ -668,7 +692,7 @@ function UseCaseCard({ c, app }: { c: (typeof USE_CASES)[number]; app: (p: strin
 }
 
 function CountLabel({ n, render }: { n: number; render: (n: number) => string }) {
-  const [v, setV] = useState(0);
+  const [v, setV] = useState(n);
   useEffect(() => {
     if (reducedMotion()) return setV(n);
     const t0 = performance.now();
@@ -682,7 +706,8 @@ function CountLabel({ n, render }: { n: number; render: (n: number) => string })
   return <span className="tabular-nums">{render(v)}</span>;
 }
 
-function UseCases({ app }: { app: (p: string) => string }) {
+function UseCases({ app, data, plan }: { app: (p: string) => string; data: PublicOverview | null | undefined; plan: PublicPlan | null | undefined }) {
+  const USE_CASES = useMemo(() => useCases(data, plan), [data, plan]);
   const track = useRef<HTMLDivElement>(null);
   const [wrapRef, p] = useScrollProgress<HTMLDivElement>();
   const [shift, setShift] = useState(0);
@@ -788,7 +813,7 @@ function Stats({ data }: { data: PublicOverview | null | undefined }) {
       <div className="mx-auto max-w-[1080px]">
         <Reveal>
           <Eyebrow label="By the numbers" />
-          <h2 className="max-w-[760px] text-[32px] font-semibold leading-[1.1] tracking-[-0.03em] sm:text-[46px]">From 256 alerts to the one that matters</h2>
+          <h2 className="max-w-[760px] text-[32px] font-semibold leading-[1.1] tracking-[-0.03em] sm:text-[46px]">From {n("present", 256)} alerts to the one that matters</h2>
         </Reveal>
         <div className="mt-8 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
           {items.map((s, k) => (
@@ -1006,6 +1031,10 @@ function UnderTheHood({ data }: { data: PublicOverview | null | undefined }) {
       <div className="mx-auto max-w-[1080px]">
         <Eyebrow label="Under the hood" />
       </div>
+      <Reveal className="mx-auto mb-4 max-w-[1080px]">
+        <p className="mb-3 text-[20px] font-semibold tracking-[-0.02em] sm:text-[24px]">The whole surface, as the graph sees it</p>
+        <AttackSurfaceMap publicData />
+      </Reveal>
       <div ref={ref} className="mx-auto grid max-w-[1080px] gap-4 lg:grid-cols-2">
         <Reveal className="lp-card flex flex-col justify-between gap-10 rounded-[28px] p-8 sm:p-10">
           <div>
@@ -1038,7 +1067,7 @@ function UnderTheHood({ data }: { data: PublicOverview | null | undefined }) {
             {[
               [h?.nodes ?? 4000, "nodes"],
               [h?.edges ?? 10800, "edges"],
-              [13, "graph tools"],
+              [data?.tools ?? 16, "graph tools"],
             ].map(([n, l]) => (
               <div key={String(l)} className="border-r border-white/10 px-3 py-4 last:border-0">
                 <CountUp to={Number(n)} className="text-[22px] font-semibold" />
@@ -1190,6 +1219,7 @@ function Footer({ app }: { app: (p: string) => string }) {
 export function Landing() {
   const { me } = useAuth();
   const data = usePublicOverview();
+  const plan = usePublicPlan();
   const slug = me?.projects[0]?.slug;
   const home = slug ? `/app/${slug}/home` : "/signup";
   // Product links: straight into the app when signed in, otherwise sign up first.
@@ -1208,8 +1238,8 @@ export function Landing() {
         <ProductWindow data={data} />
         <SourceStrip />
         <WorksAcross />
-        <Story />
-        <UseCases app={app} />
+        <Story data={data} plan={plan} />
+        <UseCases app={app} data={data} plan={plan} />
         <Stats data={data} />
         <VsSeverity data={data} />
         <FeaturePanel />

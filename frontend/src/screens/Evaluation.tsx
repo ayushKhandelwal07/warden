@@ -10,6 +10,17 @@ function Mark({ ok }: { ok: boolean }) {
   return ok ? <Check size={14} className="shrink-0 text-ok" aria-label="pass" /> : <X size={14} className="shrink-0 text-accent" aria-label="fail" />;
 }
 
+/** Capabilities a severity-only scanner does not have by design: it cannot pass or fail them, so they read "not supported". */
+const BASELINE_UNSUPPORTED = new Set(["gate", "abstain", "choke", "memory"]);
+
+function Badge({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11.5px] ${ok ? "border-ok text-ok" : "border-accent text-accent"}`}>
+      <Mark ok={ok} /> {label}
+    </span>
+  );
+}
+
 function Tile({ value, label, sub }: { value: string; label: string; sub: string }) {
   return (
     <div className="bg-bg px-4 py-4">
@@ -36,12 +47,12 @@ function Scenario({ s }: { s: EvalScenario }) {
           <span className="block text-[13.5px] font-semibold">{s.title}</span>
           <span className="block text-[12px] text-muted">{CATEGORY[s.category] ?? s.category}</span>
         </span>
-        <span className="flex items-center gap-1.5 text-[12.5px]">
-          <Mark ok={!!s.warden?.ok} /> Warden
-        </span>
-        <span className="flex items-center gap-1.5 text-[12.5px] text-muted">
-          <Mark ok={!!s.baseline?.ok} /> Severity only
-        </span>
+        <Badge ok={!!s.warden?.ok} label="Warden" />
+        {BASELINE_UNSUPPORTED.has(s.category) ? (
+          <span className="inline-flex items-center rounded-full border border-line px-2 py-0.5 text-[11.5px] text-muted">Severity only: not supported</span>
+        ) : (
+          <Badge ok={!!s.baseline?.ok} label="Severity only" />
+        )}
         <ChevronDown size={14} className={`shrink-0 text-muted ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
@@ -83,18 +94,19 @@ function Scorecard({ card }: { card: EvalCard }) {
   const m = card.metrics;
   if (!m) return null;
   const r = m.reachability;
+  const attempt = card.scenarios.filter((s) => s.status === 'ran' && !BASELINE_UNSUPPORTED.has(s.category));
   const pct = (v: number | null) => (v === null ? "n/a" : `${v}%`);
   const frac = (c: { n: number; warden: number; baseline: number }, k: "warden" | "baseline") => `${c[k]} of ${c.n}`;
   return (
     <>
       <div className="grid gap-px overflow-hidden rounded-card border border-line bg-line sm:grid-cols-2 lg:grid-cols-4">
-        <Tile value={pct(r.warden.precision)} label="Reachability precision" sub={`severity only: ${pct(r.baseline.precision)} · recall ${pct(r.warden.recall)} vs ${pct(r.baseline.recall)}`} />
+        <Tile value={pct(r.warden.precision)} label="Reachability precision" sub={`Warden ${pct(r.warden.precision)} / severity-only ${pct(r.baseline.precision)} · recall ${pct(r.warden.recall)} / ${pct(r.baseline.recall)}`} />
         <Tile value={frac(m.priority, "warden")} label="Priority order correct" sub={`severity only: ${frac(m.priority, "baseline")}`} />
-        <Tile value={frac(m.gate, "warden")} label="Safe and unsafe fixes judged correctly" sub={`severity only: ${frac(m.gate, "baseline")} (it has no gate)`} />
-        <Tile value={frac(m.abstain, "warden")} label="Abstains when no fix exists" sub={`severity only: ${frac(m.abstain, "baseline")}`} />
+        <Tile value={frac(m.gate, "warden")} label="Safe and unsafe fixes judged correctly" sub="severity-only: not supported (it has no gate)" />
+        <Tile value={frac(m.abstain, "warden")} label="Abstains when no fix exists" sub="severity-only: not supported (it never abstains)" />
       </div>
       <p className="text-[12.5px] text-muted">
-        Overall {m.overall.warden} of {m.overall.n} scenarios match the known answer; the severity-only scanner matches {m.overall.baseline}. Graph query latency over {m.latency_ms.queries} queries: p50{" "}
+        {m.overall.warden} of {m.overall.n} designed scenarios match their known answer. On the {attempt.length} scenarios a severity-only scanner can attempt, it matches {attempt.filter((s) => s.baseline?.ok).length}; the rest need a gate, memory or paths it does not have. Graph query latency over {m.latency_ms.queries} queries: p50{" "}
         {m.latency_ms.p50} ms, p95 {m.latency_ms.p95} ms. Ran in {card.seconds} s on throwaway graphs, deleted afterwards.
       </p>
     </>

@@ -309,6 +309,9 @@ export function PrImpact() {
             </button>
           ))}
         </div>
+        <p className="basis-full text-[12px] text-muted">
+          {source === "history" ? "Merged history: a real PR from the repository's past, analysed from its commits. Report only." : "Open PR on your fork: analysed live, with a pending approval to post the report."}
+        </p>
         <div className="ml-auto">
           <Button variant="primary" icon={<ScanSearch size={16} />} disabled={busy || !pr}>
             {busy ? "Following the graph…" : "Analyze"}

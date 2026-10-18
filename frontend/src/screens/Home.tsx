@@ -4,7 +4,10 @@ import { useProject } from "../lib/auth";
 import { ArrowRight, ArrowUp, RotateCw, Wrench } from "lucide-react";
 import { api, notifyApprovalsChanged, type Approval, type Overview } from "../lib/api";
 import { useApi } from "../lib/useApi";
+import { Accordion } from "../components/Accordion";
+import { AttackSurfaceMap } from "../components/AttackSurfaceMap";
 import { BaselineCompare } from "../components/BaselineCompare";
+import { TryIt } from "../components/TryIt";
 import { ChokePoints } from "../components/ChokePoints";
 import { ContradictionsPanel } from "../components/ContradictionsPanel";
 import { ComparePlans } from "../components/ComparePlans";
@@ -77,7 +80,7 @@ export function Hero({ hero }: { hero: NonNullable<Overview["hero"]> }) {
         {[
           ["Package", `${f.package}@${f.version.replace(/^v/, "")}`],
           ["Fixed in", f.fixed ?? "no fix"],
-          ["Exploit odds", pct(f.epss)],
+          ["EPSS exploit probability", pct(f.epss)],
           ["On KEV since", f.kev_added ?? "n/a"],
         ].map(([k, v]) => (
           <div key={k} className="bg-bg px-4 py-3">
@@ -132,7 +135,7 @@ export function Home() {
             {t.kev === 1 ? "1 advisory" : `${t.kev} advisories`} on CISA KEV, reachable from the front door.
           </h1>
           <p className="mt-2 text-muted">
-            {t.reachable_vulnerabilities} of {t.vulnerabilities} advisories are graph-reachable under the current topology model. Ask what to do about it.
+            {t.reachable_vulnerabilities} of {t.vulnerabilities} advisories are graph-reachable under the current topology model, but only {ov.data.funnel.stages.find((s) => s.key === "signal")?.n ?? "a few"} carry an exploit signal and {t.kev} {t.kev === 1 ? "is" : "are"} on CISA KEV.
           </p>
         </div>
         <form
@@ -156,6 +159,20 @@ export function Home() {
         </div>
       </section>
 
+      <TryIt onBuild={build} building={plan.busy} />
+      {plan.error && <p className="text-small text-accent">{plan.error}</p>}
+
+      <AttackSurfaceMap />
+
+      {ov.data.hero ? (
+        <Hero hero={ov.data.hero} />
+      ) : (
+        <p className="rounded-card border border-line px-4 py-3 text-small text-muted">
+          <span className="mr-2 inline-block h-2 w-2 rounded-full bg-ok align-middle" />
+          Nothing on the CISA KEV list is reachable from the internet at this release.
+        </p>
+      )}
+
       <div>
         <h2 className="mb-3 text-small font-semibold">Where the numbers come from</h2>
         <Funnel data={ov.data.funnel} />
@@ -170,15 +187,19 @@ export function Home() {
 
       <ChokePoints />
 
-      <ContradictionsPanel />
+      <Accordion title="Evidence contradictions" hint="Where our own sources disagree. Plans that depend on a disputed fact are blocked.">
+        <ContradictionsPanel />
+      </Accordion>
 
-      <ComparePlans
-        onFiled={(blocked) => {
-          notifyApprovalsChanged();
-          if (blocked) setPlan({ busy: false, error: blocked });
-          else nav(to("/approvals"));
-        }}
-      />
+      <Accordion title="Compare fix plans" hint="Four strategies under your constraints, each rehearsed on its own graph copy.">
+        <ComparePlans
+          onFiled={(blocked) => {
+            notifyApprovalsChanged();
+            if (blocked) setPlan({ busy: false, error: blocked });
+            else nav(to("/approvals"));
+          }}
+        />
+      </Accordion>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Tile label="Exposures" value={ov.data.funnel.instances[0].n} sub="advisory × service" to="/ask?q=What%20should%20we%20fix%20first%3F" />
@@ -187,22 +208,15 @@ export function Home() {
         <Tile label="Fixes opened" value={opened} sub="PRs and comments" to="/approvals" />
       </div>
 
-      {ov.data.hero ? (
-        <Hero hero={ov.data.hero} />
-      ) : (
-        <p className="rounded-card border border-line px-4 py-3 text-small text-muted">
-          <span className="mr-2 inline-block h-2 w-2 rounded-full bg-ok align-middle" />
-          Nothing on the CISA KEV list is reachable from the internet at this release.
-        </p>
-      )}
-
       <div className="grid grid-cols-[minmax(0,1fr)] gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
-        <WatcherCard
-          onChange={() => {
-            ov.reload();
-            apr.reload();
-          }}
-        />
+        <Accordion title="Watcher" hint="Re-reads the fork when it changes and proposes fixes on its own.">
+          <WatcherCard
+            onChange={() => {
+              ov.reload();
+              apr.reload();
+            }}
+          />
+        </Accordion>
         <div className="flex flex-col gap-6">
           <section className="rounded-card border border-line p-4">
             <div className="mb-1 flex items-center justify-between">
@@ -213,7 +227,7 @@ export function Home() {
             </div>
             <Activity items={approvals} />
           </section>
-          <section className="flex flex-col justify-between gap-3 rounded-card border border-line p-4">
+          <section id="fix" className="flex scroll-mt-24 flex-col justify-between gap-3 rounded-card border border-line p-4">
             <div>
               <h2 className="text-small font-medium">Fix it</h2>
               <p className="mt-1 text-small text-muted">Best 5 upgrades, rehearsed on a graph copy, filed for your approval.</p>

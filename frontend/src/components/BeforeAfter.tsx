@@ -1,9 +1,19 @@
 import { ArrowRight, CheckCircle2, CircleAlert } from "lucide-react";
 import type { Proof } from "../lib/api";
+import { useMemo } from "react";
 import { PathGraph } from "./PathGraph";
 
 /** The headline attack path in the live graph, next to the same route in the rehearsal copy after the upgrade. */
 export function BeforeAfter({ proof }: { proof: Proof }) {
+  // Edges that exist before the fix and not after it (matched by what they connect, not by id) are drawn dashed.
+  const gone = useMemo(() => {
+    const key = (ev: Proof["before"], e: Proof["before"]["edges"][number]) => {
+      const name = new Map(ev.nodes.map((n) => [n.id, n.name]));
+      return `${name.get(e.source)}|${e.type}|${name.get(e.target)}`;
+    };
+    const after = new Set((proof.after?.edges ?? []).map((e) => key(proof.after!, e)));
+    return new Set(proof.before.edges.filter((e) => !after.has(key(proof.before, e))).map((e) => e.id));
+  }, [proof]);
   return (
     <section className="overflow-hidden rounded-card border border-line bg-bg">
       <header className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-line px-4 py-2.5">
@@ -19,7 +29,7 @@ export function BeforeAfter({ proof }: { proof: Proof }) {
       <div className="grid gap-px bg-line min-[1700px]:grid-cols-2">
         <div className="bg-bg p-3">
           <p className="mb-1 px-1 text-[12px] font-medium text-muted">Before · live graph · {proof.package_before}</p>
-          <PathGraph evidence={proof.before} />
+          <PathGraph evidence={proof.before} removed={gone} />
         </div>
         <div className="bg-bg p-3">
           <p className="mb-1 flex items-center gap-1.5 px-1 text-[12px] font-medium text-muted">

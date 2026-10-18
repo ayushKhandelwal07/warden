@@ -20,7 +20,7 @@ function Row({ s, max, accent }: { s: FunnelStage; max: number; accent?: boolean
           </span>
         </span>
         <span className="inline-flex shrink-0 items-center gap-1 text-[12px] text-muted">
-          How counted <ChevronDown size={13} className={open ? "rotate-180" : ""} />
+          Show query <ChevronDown size={13} className={open ? "rotate-180" : ""} />
         </span>
       </button>
       {open && (
@@ -34,7 +34,7 @@ function Row({ s, max, accent }: { s: FunnelStage; max: number; accent?: boolean
 }
 
 /** Headline numbers as overlapping filters over the same advisories, plus advisory × service exposure instances.
- *  Every count is the result of the Cypher revealed under "How counted". */
+ *  Every count is the result of the Cypher revealed under "Show query". */
 export function Funnel({ data }: { data: FunnelData }) {
   const max = Math.max(...data.stages.map((s) => s.n), 1);
   const snap = data.snapshot;

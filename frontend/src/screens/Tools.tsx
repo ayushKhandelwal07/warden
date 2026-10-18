@@ -102,6 +102,7 @@ function ToolDrawer({ tool, runId, onClose, onSaved }: { tool: ToolMeta; runId: 
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [savedAt, setSavedAt] = useState<string | null>(null);
+  const [cold, setCold] = useState<number | null>(null);
 
   const run = useCallback(
     (a: Args, save: boolean) => {
@@ -111,6 +112,7 @@ function ToolDrawer({ tool, runId, onClose, onSaved }: { tool: ToolMeta; runId: 
         .runTool(tool.name, a, save)
         .then((r) => {
           setResult(r);
+          if (!(r as ToolResult & { cached?: boolean }).cached) setCold(r.ms);
           if (save) {
             setSavedAt(new Date().toISOString());
             onSaved();
@@ -183,7 +185,7 @@ function ToolDrawer({ tool, runId, onClose, onSaved }: { tool: ToolMeta; runId: 
               </Button>
               {result && !running && (
                 <span className="text-small text-muted">
-                  {result.ms} ms{savedAt ? ` · saved ${ago(savedAt)}` : " · example preview, not saved"}
+                  {(result as ToolResult & { cached?: boolean }).cached && cold ? `cold ${cold} ms → cached ${result.ms} ms` : `${result.ms} ms`}{savedAt ? ` · saved ${ago(savedAt)}` : " · example preview, not saved"}
                 </span>
               )}
             </div>

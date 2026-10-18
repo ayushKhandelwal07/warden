@@ -189,7 +189,7 @@ export function EvidencePanel({ turn, index, total, bare }: { turn: Turn | undef
             <PathProof evidence={evidence} compact />
           </div>
         ) : (
-          <p className="px-2 py-10 text-center text-small text-muted">{turn && !s?.answer ? "Waiting for the graph…" : "No graph for this answer."}</p>
+          <p className="px-2 py-10 text-center text-small text-muted">{!turn ? "The path appears here after you ask." : !s?.answer ? "Waiting for the graph…" : "No graph path was needed for this answer."}</p>
         )}
         {s && (
           <div className="mt-3">

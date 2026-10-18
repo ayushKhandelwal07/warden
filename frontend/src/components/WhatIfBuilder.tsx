@@ -1,7 +1,8 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { FlaskConical, Plus, X } from "lucide-react";
 import { api, type GraphDiff, type ServiceInfo, type WhatIfChange, type WhatIfResult } from "../lib/api";
 import { useApi } from "../lib/useApi";
+import { AttackSurfaceMap } from "./AttackSurfaceMap";
 import { Delta } from "./PlanView";
 
 const OPS: { op: WhatIfChange["op"]; label: string }[] = [
@@ -52,6 +53,15 @@ export function WhatIfBuilder({ renderDiff }: { renderDiff: (d: GraphDiff) => Re
   };
   const r = st.r;
   const best = r?.intervention?.best;
+  useEffect(() => {
+    // Show the example straight away: "expose paymentservice" is the story in one click.
+    if (!names.length || st.r || st.busy || changes.length) return;
+    const first: WhatIfChange = { op: "expose", service: names.includes("paymentservice") ? "paymentservice" : names[0] };
+    setChanges([first]);
+    setSt({ busy: true });
+    api.whatIfChanges([first]).then((x) => setSt({ busy: false, r: x }), (e: Error) => setSt({ busy: false, error: e.message }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [names.length]);
 
   return (
     <div className="rounded-card border border-line p-6">
@@ -136,6 +146,7 @@ export function WhatIfBuilder({ renderDiff }: { renderDiff: (d: GraphDiff) => Re
             <Delta label="Total risk" before={r.risk.before} after={r.risk.after} fmt={(n) => Math.round(n).toLocaleString()} />
             <Delta label="KEV exposures" before={r.risk.kev_before} after={r.risk.kev_after} />
           </div>
+          <AttackSurfaceMap whatIfPaths={r.paths.new} compact />
           {(r.paths.new.length > 0 || r.paths.removed.length > 0 || r.sensitive.new_assets.length > 0) && (
             <div className="grid gap-6 md:grid-cols-2">
               <div>

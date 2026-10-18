@@ -23,6 +23,7 @@ export type Health = {
   status: "ok" | "down";
   graph: string;
   browser_url?: string;
+  graph_version?: number;
   nodes?: number;
   edges?: number;
   ingest?: { ref: string; sha: string; at: number } | null;
@@ -217,7 +218,7 @@ export type Approval = {
   reason?: string | null;
   payload: Plan & {
     patches?: { service: string; files: PatchFile[] }[]; pr?: number; comment?: string; risk?: string;
-    trigger?: { why: string; commit?: string } | null; body?: string; title?: string; gate?: Gate; regression?: Regression; proof?: Proof | null; unsafe_demo?: boolean;
+    demo?: boolean; demo_kind?: string; trigger?: { why: string; commit?: string } | null; body?: string; title?: string; gate?: Gate; regression?: Regression; proof?: Proof | null; unsafe_demo?: boolean;
   };
   result?: { executed: boolean; reason?: string; prs?: { service: string; number: number; url: string }[]; url?: string; number?: number; labels?: string[]; reviewers?: string[] };
 };
@@ -225,6 +226,12 @@ export type Approval = {
 export type Contradiction = { id: string; kind: string; subject: string; detail: string; resolution: string; sources: string[]; status: string; service: string | null; package: string | null; vuln: string | null };
 export const CONTRADICTIONS_CHANGED = "warden:contradictions";
 export const notifyContradictionsChanged = () => window.dispatchEvent(new Event(CONTRADICTIONS_CHANGED));
+
+export type SurfaceService = { name: string; hops: number | null; risk: number; exposures: number; kev: boolean; entry: boolean; reads: string[] };
+export type Surface = {
+  services: SurfaceService[]; assets: { name: string; sensitivity: string; weight: number }[]; calls: { from: string; to: string }[];
+  kev_path: { from: string; to: string }[]; routes: { route: string[]; asset: string }[]; entry: string[]; max_risk: number;
+};
 
 export type ReplayCall = {
   tool: string; args: Record<string, unknown>; status: "same" | "changed" | "not_replayed" | "error"; queries: { cypher: string; ms: number }[];
@@ -393,6 +400,9 @@ export const api = {
   createPlan: (maxFixes = 5, pick?: { variant: string; constraints: PlanConstraints }) =>
     postJson<{ approval: Approval | null; plan: Plan; blocked?: string | null }>("/api/plans", { max_fixes: maxFixes, ...(pick ?? {}) }),
   comparePlans: (constraints: PlanConstraints) => postJson<PlanCompare>("/api/plans/compare", { constraints }),
+  seedDemo: () => postJson<{ created: string[]; existing: string[] }>("/api/demo/seed", {}),
+  surface: () => getJson<Surface>("/api/surface"),
+  publicSurface: () => getJson<Surface>("/api/public/surface"),
   contradictions: () => getJson<{ items: Contradiction[] }>("/api/contradictions"),
   scanContradictions: () => postJson<{ open: number; checked: Record<string, number>; items: Contradiction[] }>("/api/contradictions/scan", {}),
   replay: (chat: string, turn: number, against: "current" | "golden") => postJson<ReplayResult>(`/api/replay/${chat}/${turn}`, { against }),

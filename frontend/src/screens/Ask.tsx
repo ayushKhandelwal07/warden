@@ -202,7 +202,7 @@ export function Ask() {
 
   const empty = !chatId && turns.length === 0;
   return (
-    <div className="mx-auto grid h-[calc(100dvh-var(--topbar))] max-w-[1200px] grid-cols-[minmax(0,1fr)] gap-6 px-4 pt-4 pb-3 sm:px-6 lg:grid-cols-[minmax(0,1fr)_420px] lg:pt-5">
+    <div className="mx-auto grid h-[calc(100dvh-var(--topbar))] max-w-[1200px] grid-cols-[minmax(0,1fr)] gap-6 px-4 pt-4 pb-3 sm:px-6 lg:grid-cols-[minmax(0,1.9fr)_minmax(340px,1fr)] lg:pt-5">
       <section className="flex min-h-0 min-w-0 flex-col">
         {chat && <ChatHeader chat={chat} onChange={setChat} />}
         <div ref={scroller} className="min-h-0 flex-1 overflow-y-auto pt-4 pb-4 pr-1">

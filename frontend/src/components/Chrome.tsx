@@ -31,7 +31,7 @@ export function StatusDot({ health, error, up }: { health: Health | null; error:
 
   const down = !!error || health?.status === "down";
   const dbDown = health?.status === "down" || (error instanceof ApiError && error.status === 503);
-  const label = down ? (dbDown ? "Graph offline" : "API offline") : health ? "Live" : "Connecting";
+  const label = down ? (dbDown ? "Graph offline" : "API offline") : health ? (health.graph_version ? `Graph live · v${health.graph_version}` : "Graph live") : "Connecting";
   return (
     <div ref={box} className="relative">
       <button onClick={() => setOpen((o) => !o)} className="inline-flex h-9 items-center gap-2 rounded-full border border-line px-3 text-[12px] text-muted hover:text-ink" aria-expanded={open}>

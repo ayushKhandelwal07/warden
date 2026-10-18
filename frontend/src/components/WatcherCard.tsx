@@ -50,7 +50,7 @@ export function WatcherCard({ onChange }: { onChange?: () => void }) {
       <div className="flex flex-wrap items-center gap-3 border-b border-line px-4 py-3">
         <Eye size={16} className={st?.enabled ? "text-accent" : "text-muted"} />
         <div className="min-w-0 flex-1">
-          <p className="text-small font-medium">Watcher {st?.enabled ? "is on" : "is off"}</p>
+          <p className="text-small font-medium">{off ? "Watcher available when GitHub is connected" : st?.enabled ? "Watcher is on" : "Watcher is off"}</p>
           <p className="truncate text-[12px] text-muted">
             {off ? "Connect GitHub to watch your fork" : st ? `${st.branch ?? "main"} · ${st.last_status} · ${ago(st.last_check)}` : "Loading…"}
           </p>
