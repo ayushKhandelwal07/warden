@@ -41,8 +41,8 @@ function DiffView({ d }: { d: GraphDiff }) {
   return (
     <div className="flex flex-col gap-6">
       <div className="grid grid-cols-1 divide-line rounded-card border border-line sm:grid-cols-3 sm:divide-x">
-        <Delta label="Reachable findings" before={d.before.findings} after={d.after.findings} />
-        <Delta label="On CISA KEV" before={d.before.kev_findings} after={d.after.kev_findings} />
+        <Delta label="Reachable exposures" before={d.before.findings} after={d.after.findings} />
+        <Delta label="KEV exposures" before={d.before.kev_findings} after={d.after.kev_findings} />
         <Delta label="Total risk" before={d.before.risk} after={d.after.risk} fmt={(n) => Math.round(n).toLocaleString()} />
       </div>
       <div className="grid gap-8 lg:grid-cols-2">
@@ -103,7 +103,7 @@ function SyncResult({ r }: { r: SyncRecord }) {
               <p key={d.decision} className="text-small">
                 {d.verified ? <span className="font-medium text-ok">Verified fixed</span> : <span className="font-medium">{d.done_pct}% done</span>} · {d.text}{" "}
                 <span className="text-muted">
-                  ({d.targets - d.remaining} of {d.targets} targeted findings gone)
+                  ({d.targets - d.remaining} of {d.targets} targeted exposures gone)
                 </span>
               </p>
             ))}

@@ -13,6 +13,8 @@ export type EvidenceEdge = {
   target: string;
   type: string;
   props: Record<string, string | number | boolean | null>;
+  /** Where this hop comes from: a file or feed (sourced), configuration (inferred) or the team (curated). */
+  provenance?: { kind: "sourced" | "inferred" | "curated"; source: string; url: string | null; note?: string };
 };
 
 export type Evidence = { nodes: EvidenceNode[]; edges: EvidenceEdge[] };
@@ -62,8 +64,27 @@ export type HeroFacts = {
   hops: number;
 };
 
+export type BaselineRow = { vuln: string; service: string; package: string; severity: string; cvss: number | null; risk: number; tier: string; kev: boolean;
+  epss: number | null; hops: number; data: string[]; baseline_rank: number; graph_rank: number; why: string[] };
+export type Baseline = {
+  universe: number; n: number; overlap: number;
+  method: { unit: string; baseline: string; kev_aware: string; graph: string };
+  baseline_top: BaselineRow[]; graph_top: BaselineRow[]; only_baseline: BaselineRow[]; only_graph: BaselineRow[];
+  kev_aware: { top: BaselineRow[]; overlap: number; only_graph: BaselineRow[]; only_kev_aware: BaselineRow[] };
+  kev_positions: BaselineRow[];
+  headline: { scanner_pick: BaselineRow; graph_pick: BaselineRow; cvss_gap: number; risk_ratio: number } | null;
+};
+
+export type FunnelStage = { key: string; label: string; unit: string; definition: string; cypher: string; n: number; ms: number };
+export type Funnel = {
+  stages: FunnelStage[];
+  instances: FunnelStage[];
+  snapshot: { graph: string; ingest: { ref: string; sha: string; at: number } | null; kev_catalog: { version: string; released: string } | null; graph_version: number; intel_retrieved?: { kev: string | null; epss: string | null } };
+};
+
 export type Overview = {
   totals: Totals;
+  funnel: Funnel;
   hero: { facts: HeroFacts; evidence: Evidence; cypher: string; ms: number } | null;
 };
 
@@ -115,6 +136,14 @@ export type McpStatus = {
   client_config: unknown;
 };
 
+export type GateCheck = { check: string; ok: boolean; detail: string; level?: "block" | "warn" | "info" };
+export type Gate = { passed: boolean; checks: GateCheck[] };
+export type RegressionRow = { vuln?: string; service: string; severity?: string; asset?: string; sensitivity?: string; kev?: boolean; tier?: string;
+  risk_before?: number | null; risk_after?: number | null; package_before?: string | null; package_after?: string | null; exposures_before?: number; exposures_after?: number };
+export type RegressionKind = { before: number; after: number; removed: RegressionRow[]; remaining: RegressionRow[]; new: RegressionRow[] };
+export type Regression = { kev: RegressionKind; sensitive: RegressionKind; data: RegressionKind };
+export type Proof = { vuln: string; service: string; kev: boolean; package_before: string; package_after: string | null; removed: boolean; before: Evidence; after: Evidence | null };
+
 export type PlanNumbers = { findings: number; vulnerabilities: number; kev_findings: number; risk: number };
 
 export type PlanItem = {
@@ -160,7 +189,7 @@ export type Approval = {
   reason?: string | null;
   payload: Plan & {
     patches?: { service: string; files: PatchFile[] }[]; pr?: number; comment?: string; risk?: string;
-    trigger?: { why: string; commit?: string } | null; body?: string; title?: string; gate?: { passed: boolean; checks: { check: string; ok: boolean; detail: string }[] };
+    trigger?: { why: string; commit?: string } | null; body?: string; title?: string; gate?: Gate; regression?: Regression; proof?: Proof | null; unsafe_demo?: boolean;
   };
   result?: { executed: boolean; reason?: string; prs?: { service: string; number: number; url: string }[]; url?: string; number?: number; labels?: string[]; reviewers?: string[] };
 };
@@ -291,11 +320,14 @@ export const api = {
   acceptInvite: (token: string) => postJson<Me & InviteInfo>(`/api/invites/${token}/accept`, {}),
   health: () => getJson<Health>("/api/health"),
   overview: () => getJson<Overview>("/api/overview"),
+  baseline: () => getJson<Baseline>("/api/baseline"),
+  validateEvidence: (edges: string[]) => postJson<{ valid: boolean; checked: number; hops: { edge: string; present: boolean; type: string | null }[]; ms: number; graph: string; at: number }>("/api/evidence/validate", { edges }),
   tools: () => getJson<ToolMeta[]>("/api/tools"),
   mcp: () => getJson<McpStatus>("/api/mcp"),
   runTool: (name: string, args: Record<string, unknown>, save = true) => postJson<ToolResult & { run_id?: string }>(`/api/tools/${name}${save ? "" : "?save=false"}`, args),
   toolRuns: () => getJson<ToolRunSummary[]>("/api/tool-runs"),
   toolRun: (id: string) => getJson<{ id: string; tool: string; args: Record<string, unknown>; created_at: string; result: ToolResult }>(`/api/tool-runs/${id}`),
+  unsafePlan: () => postJson<Plan & { gate: Gate; unsafe_demo?: boolean; items: PlanItem[] }>("/api/plans/unsafe", {}),
   createPlan: (maxFixes = 5) => postJson<{ approval: Approval | null; plan: Plan }>("/api/plans", { max_fixes: maxFixes }),
   approvals: () => getJson<Approval[]>("/api/approvals"),
   approval: (id: string) => getJson<Approval>(`/api/approvals/${id}`),

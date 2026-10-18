@@ -4,7 +4,10 @@ import { ArrowLeft, ArrowUpRight, Check, FileText, GitPullRequest, MessageSquare
 import { api, APPROVALS_CHANGED, notifyApprovalsChanged, type Approval, type ApprovalStatus } from "../lib/api";
 import { useProject } from "../lib/auth";
 import { useApi } from "../lib/useApi";
+import { BeforeAfter } from "../components/BeforeAfter";
+import { GateView } from "../components/GateView";
 import { DiffBlock, PlanView } from "../components/PlanView";
+import { Regression } from "../components/Regression";
 import { Button, EmptyState } from "../components/ui";
 
 const STATUS: Record<ApprovalStatus, { label: string; dot: string }> = {
@@ -150,18 +153,9 @@ function Detail({ a, repo, onChange }: { a: Approval; repo?: string; onChange: (
         </section>
       ) : (
         <>
-          {a.payload.gate && (
-            <section className="rounded-card border border-line p-4 text-small">
-              <p className={`font-medium ${a.payload.gate.passed ? "text-ok" : "text-accent"}`}>Rehearsal gate {a.payload.gate.passed ? "passed" : "blocked this plan"}</p>
-              <ul className="mt-2 flex flex-col gap-1 text-[12.5px] text-muted">
-                {a.payload.gate.checks.map((c) => (
-                  <li key={c.check}>
-                    {c.ok ? "✓" : "✗"} {c.check} <span className="text-ink">({c.detail})</span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
+          {a.payload.proof && <BeforeAfter proof={a.payload.proof} />}
+          {a.payload.gate && <GateView gate={a.payload.gate} />}
+          {a.payload.regression && <Regression data={a.payload.regression} />}
           <PlanView plan={a.payload} />
         </>
       )}

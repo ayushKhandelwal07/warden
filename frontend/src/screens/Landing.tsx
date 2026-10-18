@@ -25,12 +25,12 @@ import {
 } from "lucide-react";
 import { Logo } from "../components/Chrome";
 import { PathGraph } from "../components/PathGraph";
-import { API_BASE, type Health, type Overview } from "../lib/api";
+import { API_BASE, type Baseline, type Health, type Overview } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { CountUp, Reveal, ScrollWords, reducedMotion, useInView, useScrollProgress, useScrolled, useTicker } from "./landing/motion";
 import "./landing/landing.css";
 
-type PublicOverview = Overview & { health: Health };
+type PublicOverview = Overview & { health: Health; baseline: Baseline };
 
 /** The project's public repo; links are hidden until VITE_REPO_URL is set. */
 const REPO = (import.meta.env.VITE_REPO_URL as string | undefined) ?? "";
@@ -456,8 +456,8 @@ function StoryPanel({ step }: { step: number }) {
       {step === 2 && (
         <div className="grid grid-cols-2 gap-3">
           {[
-            ["Reachable findings", "681", "233"],
-            ["CISA KEV findings", "4", "0"],
+            ["Reachable exposures", "681", "233"],
+            ["KEV exposures", "4", "0"],
           ].map(([k, a, b]) => (
             <div key={k} className="rounded-2xl border border-line p-4">
               <p className="text-[12px] text-muted">{k}</p>
@@ -504,7 +504,7 @@ function StoryPanel({ step }: { step: number }) {
           <div className="flex items-center gap-3 rounded-2xl border border-line px-4 py-3 text-[13px]">
             <CheckCircle2 size={18} className="text-ok" />
             <span>
-              <span className="font-semibold">Decision verified.</span> The findings it targeted are gone from the new graph.
+              <span className="font-semibold">Decision verified.</span> The exposures it targeted are gone from the new graph.
             </span>
           </div>
           <p className="text-[13px] text-muted">The decision stays in the graph, so the next question can cite it.</p>
@@ -775,12 +775,13 @@ function UseCases({ app }: { app: (p: string) => string }) {
 /* ───────────────────────────── Stats ───────────────────────────── */
 
 function Stats({ data }: { data: PublicOverview | null | undefined }) {
-  const t = data?.totals;
+  const f = data?.funnel?.stages;
+  const n = (key: string, fallback: number) => f?.find((x) => x.key === key)?.n ?? fallback;
   const items = [
-    { icon: ScanSearch, n: t?.vulnerabilities ?? 256, suffix: "", label: "known advisories", note: "every lockfile in the demo org" },
-    { icon: Radar, n: t?.reachable_vulnerabilities ?? 239, suffix: "", label: "reachable from the internet", note: "traced through ingress and calls" },
-    { icon: ShieldCheck, n: t?.kev ?? 1, suffix: "", label: "exploited in the wild", note: "on CISA KEV, fixed first", accent: true },
-    { icon: Sparkles, n: 74, suffix: "%", label: "of risk removed", note: "by 5 upgrades, measured on a copy" },
+    { icon: ScanSearch, n: n("present", 256), label: "advisories present", note: "vulnerable versions in every lockfile" },
+    { icon: Radar, n: n("reachable", 239), label: "graph-reachable", note: "from the front door, under the topology model" },
+    { icon: Sparkles, n: n("signal", 3), label: "with an exploit signal", note: "on CISA KEV or EPSS of 10% or more" },
+    { icon: ShieldCheck, n: n("kev", 1), label: "on CISA KEV", note: "known exploitation reported", accent: true },
   ];
   return (
     <section className="lp-band">
@@ -796,13 +797,66 @@ function Stats({ data }: { data: PublicOverview | null | undefined }) {
                 <s.icon size={16} />
               </span>
               <div>
-                <CountUp to={s.n} suffix={s.suffix} className={`text-[40px] font-semibold leading-none tracking-[-0.04em] sm:text-[52px] ${s.accent ? "text-accent" : ""}`} />
+                <CountUp to={s.n} className={`text-[40px] font-semibold leading-none tracking-[-0.04em] sm:text-[52px] ${s.accent ? "text-accent" : ""}`} />
                 <p className="mt-2 text-[14px] font-semibold">{s.label}</p>
                 <p className="mt-0.5 text-[12.5px] text-muted">{s.note}</p>
               </div>
             </Reveal>
           ))}
         </div>
+        <p className="mt-4 text-[12.5px] text-muted">Unique advisories, as overlapping filters over the same inventory. Fix plans count exposures (advisory × service). Inside the app, every number opens the Cypher that produced it.</p>
+      </div>
+    </section>
+  );
+}
+
+/* ───────────────────────────── Graph vs severity ───────────────────────────── */
+
+function VsSeverity({ data }: { data: PublicOverview | null | undefined }) {
+  const b = data?.baseline;
+  if (!b) return null;
+  const kev = b.kev_positions;
+  const h = b.headline;
+  return (
+    <section className="lp-band lp-band-grey">
+      <div className="mx-auto max-w-[1080px]">
+        <Reveal>
+          <Eyebrow label="Graph vs severity" />
+          <h2 className="max-w-[820px] text-[32px] font-semibold leading-[1.1] tracking-[-0.03em] sm:text-[46px]">A scanner sorts by severity. Warden sorts by what the graph can prove.</h2>
+        </Reveal>
+        <div className="mt-8 grid gap-4 md:grid-cols-3">
+          <Reveal className="lp-card rounded-[22px] p-6">
+            <CountUp to={b.overlap} className="text-[52px] font-semibold leading-none tracking-[-0.04em]" />
+            <span className="text-[20px] text-muted"> of {b.n}</span>
+            <p className="mt-3 text-[14px] font-semibold">top-{b.n} exposures in common</p>
+            <p className="mt-0.5 text-[12.5px] text-muted">CVSS-only ranking vs Warden's, over the same {b.universe} exposures.</p>
+          </Reveal>
+          <Reveal delay={90} className="lp-card rounded-[22px] p-6">
+            <span className="text-[52px] font-semibold leading-none tracking-[-0.04em] text-accent tabular-nums">
+              {kev.length ? `${Math.min(...kev.map((k) => k.baseline_rank))}–${Math.max(...kev.map((k) => k.baseline_rank))}` : "n/a"}
+            </span>
+            <p className="mt-3 text-[14px] font-semibold">where severity-only puts the CISA KEV exposures</p>
+            <p className="mt-0.5 text-[12.5px] text-muted">Warden ranks them {kev.length ? `1 to ${Math.max(...kev.map((k) => k.graph_rank))}` : "first"} of {b.universe}.</p>
+          </Reveal>
+          <Reveal delay={180} className="lp-card rounded-[22px] p-6">
+            <CountUp to={b.kev_aware.overlap} className="text-[52px] font-semibold leading-none tracking-[-0.04em]" />
+            <span className="text-[20px] text-muted"> of {b.n}</span>
+            <p className="mt-3 text-[14px] font-semibold">even with a KEV-first scanner</p>
+            <p className="mt-0.5 text-[12.5px] text-muted">It catches the KEV advisory, then fills the rest by CVSS, ignoring distance from the front door and exploit odds.</p>
+          </Reveal>
+        </div>
+        {h && (
+          <Reveal className="lp-card mt-4 flex flex-col gap-3 rounded-[22px] p-5 sm:flex-row sm:items-center sm:gap-6">
+            <p className="text-[14px] font-semibold sm:w-[200px] sm:shrink-0">Same CVSS ({h.scanner_pick.cvss} and {h.graph_pick.cvss}), very different risk</p>
+            <div className="flex min-w-0 flex-1 flex-col gap-1 text-[13px] sm:flex-row sm:items-center sm:gap-3">
+              <span className="text-muted"><span className="font-mono text-ink">{h.scanner_pick.vuln}</span> in {h.scanner_pick.service}: risk {h.scanner_pick.risk}</span>
+              <ArrowRight size={14} className="hidden shrink-0 sm:block" />
+              <span className="text-muted"><span className="font-mono text-ink">{h.graph_pick.vuln}</span> in {h.graph_pick.service}: risk {h.graph_pick.risk}</span>
+            </div>
+            <span className="inline-flex h-9 shrink-0 items-center self-start rounded-full bg-ink px-3.5 text-[13px] font-semibold text-white sm:self-auto">{h.risk_ratio}× higher</span>
+          </Reveal>
+        )}
+        <p className="mt-4 text-[12.5px] text-muted">Both rankings use the same snapshot and the same exposures. Severity-only ties break by advisory id; nothing is tuned.</p>
       </div>
     </section>
   );
@@ -825,7 +879,7 @@ function FeaturePanel() {
   const i = pick ?? auto;
   const f = FEATURES[i];
   return (
-    <section className="lp-band lp-band-grey">
+    <section className="lp-band">
       <div ref={ref} className="mx-auto max-w-[1160px]">
         <Reveal>
           <Eyebrow label="Features" />
@@ -948,7 +1002,7 @@ function UnderTheHood({ data }: { data: PublicOverview | null | undefined }) {
   const typed = useTyped(CYPHER, seen, 140);
   const h = data?.health;
   return (
-    <section id="graph" className="lp-band scroll-mt-16">
+    <section id="graph" className="lp-band lp-band-grey scroll-mt-16">
       <div className="mx-auto max-w-[1080px]">
         <Eyebrow label="Under the hood" />
       </div>
@@ -1009,7 +1063,7 @@ const NEXT_STEPS = [
 
 function EndCta({ app, signedIn }: { app: string; signedIn: boolean }) {
   return (
-    <section className="lp-band lp-band-grey">
+    <section className="lp-band">
       <Reveal className="lp-card mx-auto grid max-w-[1160px] overflow-hidden rounded-[32px] lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
         <div className="lp-glow flex flex-col justify-center bg-tint p-8 sm:p-12">
           <Eyebrow label="Get started" />
@@ -1157,6 +1211,7 @@ export function Landing() {
         <Story />
         <UseCases app={app} />
         <Stats data={data} />
+        <VsSeverity data={data} />
         <FeaturePanel />
         <UnderTheHood data={data} />
         <EndCta app={home} signedIn={!!me} />

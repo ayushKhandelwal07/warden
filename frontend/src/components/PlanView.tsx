@@ -19,8 +19,8 @@ export function PlanView({ plan }: { plan: Plan }) {
   return (
     <div className="flex flex-col gap-5">
       <div className="grid grid-cols-1 divide-line rounded-card border border-line sm:grid-cols-3 sm:divide-x">
-        <Delta label="Reachable findings" before={b.findings} after={a.findings} />
-        <Delta label="On CISA KEV" before={b.kev_findings} after={a.kev_findings} />
+        <Delta label="Reachable exposures" before={b.findings} after={a.findings} />
+        <Delta label="KEV exposures" before={b.kev_findings} after={a.kev_findings} />
         <Delta label="Total risk" before={b.risk} after={a.risk} fmt={(n) => Math.round(n).toLocaleString()} />
       </div>
 

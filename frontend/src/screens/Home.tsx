@@ -4,7 +4,11 @@ import { useProject } from "../lib/auth";
 import { ArrowRight, ArrowUp, RotateCw, Wrench } from "lucide-react";
 import { api, notifyApprovalsChanged, type Approval, type Overview } from "../lib/api";
 import { useApi } from "../lib/useApi";
+import { BaselineCompare } from "../components/BaselineCompare";
+import { Funnel } from "../components/Funnel";
+import { GateView } from "../components/GateView";
 import { PathGraph } from "../components/PathGraph";
+import { PathProof } from "../components/PathProof";
 import { WatcherCard } from "../components/WatcherCard";
 import { Button, EmptyState, KevBadge } from "../components/ui";
 
@@ -63,6 +67,9 @@ export function Hero({ hero }: { hero: NonNullable<Overview["hero"]> }) {
       <div className="p-3">
         <PathGraph evidence={evidence} />
       </div>
+      <div className="border-t border-line p-3">
+        <PathProof evidence={evidence} />
+      </div>
       <dl className="grid grid-cols-2 gap-px border-t border-line bg-line sm:grid-cols-4">
         {[
           ["Package", `${f.package}@${f.version.replace(/^v/, "")}`],
@@ -85,8 +92,10 @@ export function Home() {
   const { to } = useProject();
   const ov = useApi(api.overview);
   const apr = useApi(api.approvals);
+  const base = useApi(api.baseline);
   const [q, setQ] = useState("");
   const [plan, setPlan] = useState<{ busy: boolean; error?: string }>({ busy: false });
+  const [unsafe, setUnsafe] = useState<{ busy: boolean; plan?: Awaited<ReturnType<typeof api.unsafePlan>>; error?: string }>({ busy: false });
 
   if (ov.loading) return <p className="py-24 text-center text-muted">Reading the graph…</p>;
   if (ov.error || !ov.data)
@@ -117,10 +126,10 @@ export function Home() {
       <section className="mx-auto flex w-full max-w-[720px] flex-col items-center gap-6 text-center">
         <div>
           <h1 className="text-[28px] font-semibold leading-tight tracking-[-0.02em] sm:text-[40px]">
-            {t.kev === 1 ? "1 vulnerability" : `${t.kev} vulnerabilities`} exploited in the wild.
+            {t.kev === 1 ? "1 advisory" : `${t.kev} advisories`} on CISA KEV, reachable from the front door.
           </h1>
           <p className="mt-2 text-muted">
-            {t.reachable_vulnerabilities} of {t.vulnerabilities} known issues are reachable from the internet. Ask what to do about it.
+            {t.reachable_vulnerabilities} of {t.vulnerabilities} advisories are graph-reachable under the current topology model. Ask what to do about it.
           </p>
         </div>
         <form
@@ -144,9 +153,21 @@ export function Home() {
         </div>
       </section>
 
+      <div>
+        <h2 className="mb-3 text-small font-semibold">Where the numbers come from</h2>
+        <Funnel data={ov.data.funnel} />
+      </div>
+
+      {base.data && (
+        <div>
+          <h2 className="mb-3 text-small font-semibold">What the graph changes</h2>
+          <BaselineCompare data={base.data} />
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Tile label="Reachable" value={t.reachable_vulnerabilities} sub={`of ${t.vulnerabilities} issues`} to="/ask?q=What%20should%20we%20fix%20first%3F" />
-        <Tile label="Exploited" value={t.kev} sub="on CISA KEV" accent={t.kev > 0} />
+        <Tile label="Exposures" value={ov.data.funnel.instances[0].n} sub="advisory × service" to="/ask?q=What%20should%20we%20fix%20first%3F" />
+        <Tile label="KEV exposures" value={ov.data.funnel.instances[1].n} sub="1 advisory, several services" accent={t.kev > 0} />
         <Tile label="Waiting" value={pending} sub="approvals" to="/approvals" accent={pending > 0} />
         <Tile label="Fixes opened" value={opened} sub="PRs and comments" to="/approvals" />
       </div>
@@ -186,6 +207,25 @@ export function Home() {
               {plan.busy ? "Rehearsing…" : "Build a fix plan"}
             </Button>
             {plan.error && <p className="text-small text-accent">{plan.error}</p>}
+            <button
+              onClick={() => {
+                setUnsafe({ busy: true });
+                api.unsafePlan().then((p) => setUnsafe({ busy: false, plan: p }), (e: Error) => setUnsafe({ busy: false, error: e.message }));
+              }}
+              disabled={unsafe.busy}
+              className="self-start text-[12.5px] text-muted underline-offset-2 hover:text-ink hover:underline disabled:opacity-50"
+            >
+              {unsafe.busy ? "Rehearsing a bad plan…" : "Try a deliberately unsafe plan"}
+            </button>
+            {unsafe.error && <p className="text-small text-accent">{unsafe.error}</p>}
+            {unsafe.plan && (
+              <div className="flex flex-col gap-2">
+                <p className="text-[12.5px] text-muted">
+                  Rehearsed for real: pin {unsafe.plan.items[0]?.package} back to {unsafe.plan.items[0]?.to}. It is never filed for approval.
+                </p>
+                <GateView gate={unsafe.plan.gate} title="Gate verdict on the unsafe plan" />
+              </div>
+            )}
           </section>
         </div>
       </div>
