@@ -5,6 +5,8 @@ import { ArrowRight, Check, ChevronDown, LoaderCircle, ShieldAlert, ShieldCheck 
 import type { Evidence, ToolResult } from "../lib/api";
 import type { AgentEvent } from "../lib/ask";
 import { PathGraph } from "./PathGraph";
+import { GraphWork } from "./GraphWork";
+import { ReplayPanel } from "./ReplayPanel";
 import { PathProof } from "./PathProof";
 import { ToolResultView } from "./ToolResultView";
 
@@ -78,7 +80,7 @@ export function Answer({ text }: { text: string }) {
 
 /** One exchange: the question bubble, then a compact answer bubble. Tap the answer to show its evidence. */
 /** One question and its answer. `onEvidence` pins this answer's path in the evidence panel (or sheet on phones). */
-export function ChatTurn({ turn, selected, onEvidence }: { turn: Turn; selected: boolean; onEvidence: () => void }) {
+export function ChatTurn({ turn, selected, onEvidence, chatId, number }: { turn: Turn; selected: boolean; onEvidence: () => void; chatId?: string; number?: number }) {
   const { to } = useProject();
   const [trace, setTrace] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
@@ -154,6 +156,7 @@ export function ChatTurn({ turn, selected, onEvidence }: { turn: Turn; selected:
             })}
           </ol>
         )}
+        {chatId && number && s.answer && s.calls.length > 0 && <ReplayPanel key={`${chatId}-${number}`} chatId={chatId} turn={number} />}
         {openResult && (
           <div className="mt-2 rounded-card bg-tint p-2" onClick={(e) => e.stopPropagation()}>
             <ToolResultView result={openResult} />
@@ -187,6 +190,11 @@ export function EvidencePanel({ turn, index, total, bare }: { turn: Turn | undef
           </div>
         ) : (
           <p className="px-2 py-10 text-center text-small text-muted">{turn && !s?.answer ? "Waiting for the graph…" : "No graph for this answer."}</p>
+        )}
+        {s && (
+          <div className="mt-3">
+            <GraphWork results={[...s.results.values()]} evidence={evidence} />
+          </div>
         )}
       </div>
     </div>

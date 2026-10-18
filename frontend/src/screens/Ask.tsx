@@ -233,7 +233,7 @@ export function Ask() {
           ) : (
             <div className="flex flex-col gap-6">
               {turns.map((t, i) => (
-                <ChatTurn key={i} turn={t} selected={i === curIndex} onEvidence={() => showEvidence(i)} />
+                <ChatTurn key={i} turn={t} selected={i === curIndex} onEvidence={() => showEvidence(i)} chatId={t.done ? chatId : undefined} number={i + 1} />
               ))}
             </div>
           )}

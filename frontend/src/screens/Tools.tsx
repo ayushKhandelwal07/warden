@@ -160,6 +160,11 @@ function ToolDrawer({ tool, runId, onClose, onSaved }: { tool: ToolMeta; runId: 
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
           <p className="max-w-[640px] text-small text-muted">{tool.description}</p>
+          {tool.without_graph && (
+            <p className="mt-3 max-w-[640px] rounded-card border border-line px-3 py-2 text-[12.5px] text-muted">
+              <span className="font-medium text-ink">Without the graph.</span> {tool.without_graph}
+            </p>
+          )}
           <form
             className="mt-5 flex flex-col gap-5"
             onSubmit={(e) => {

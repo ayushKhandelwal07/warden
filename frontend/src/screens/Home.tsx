@@ -5,6 +5,8 @@ import { ArrowRight, ArrowUp, RotateCw, Wrench } from "lucide-react";
 import { api, notifyApprovalsChanged, type Approval, type Overview } from "../lib/api";
 import { useApi } from "../lib/useApi";
 import { BaselineCompare } from "../components/BaselineCompare";
+import { ChokePoints } from "../components/ChokePoints";
+import { ComparePlans } from "../components/ComparePlans";
 import { Funnel } from "../components/Funnel";
 import { GateView } from "../components/GateView";
 import { PathGraph } from "../components/PathGraph";
@@ -164,6 +166,16 @@ export function Home() {
           <BaselineCompare data={base.data} />
         </div>
       )}
+
+      <ChokePoints />
+
+      <ComparePlans
+        onFiled={(blocked) => {
+          notifyApprovalsChanged();
+          if (blocked) setPlan({ busy: false, error: blocked });
+          else nav(to("/approvals"));
+        }}
+      />
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Tile label="Exposures" value={ov.data.funnel.instances[0].n} sub="advisory × service" to="/ask?q=What%20should%20we%20fix%20first%3F" />

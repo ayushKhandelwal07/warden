@@ -77,6 +77,15 @@ export type EvalCard = {
     latency_ms: { queries: number; p50: number | null; p95: number | null } };
   baseline_definition?: string; limitations?: string;
 };
+export type PlanConstraints = { max_changes?: number; frozen_services?: string[]; no_major?: boolean; must_fix_kev?: boolean };
+export type PlanRow = {
+  id: string; label: string; why: string; empty?: boolean; same_as?: string | null; recommended?: boolean; pareto?: boolean;
+  risk_before?: number; risk_after?: number; risk_removed?: number; risk_removed_pct?: number; changes?: number; majors?: number; new_advisories?: number;
+  exposures_removed?: number; residual_kev?: number; kev_before?: number; gate?: boolean; gate_failed?: string[];
+  items?: { package: string; from: string; to: string; services: string[]; kev: boolean; major: boolean; risk_removed: number }[];
+  shared_win?: { package: string; to: string; exposures: number; services: number; vulns: number; top_cvss: { vuln: string; service: string; cvss: number } | null } | null;
+};
+export type PlanCompare = { constraints: Required<PlanConstraints>; rows: PlanRow[]; recommended: string | null; note: string };
 export type Baseline = {
   universe: number; n: number; overlap: number;
   method: { unit: string; baseline: string; kev_aware: string; graph: string };
@@ -116,6 +125,7 @@ export type ToolMeta = {
   description: string;
   category: string;
   example: Record<string, unknown>;
+  without_graph?: string | null;
   params: ToolParam[];
 };
 
@@ -171,7 +181,13 @@ export type PlanItem = {
   major?: boolean;
 };
 
+export type PlanMemory = {
+  notes: { decision: string; package: string; from: string; to: string; status: string; reason: string | null; by: string | null; at: number | null; state: string; why: string; action: string }[];
+  changed: { from: string[]; to: string[] } | null;
+};
+
 export type Plan = {
+  memory?: PlanMemory | null;
   summary: string;
   items: PlanItem[];
   before: PlanNumbers | null;
@@ -203,6 +219,22 @@ export type Approval = {
     trigger?: { why: string; commit?: string } | null; body?: string; title?: string; gate?: Gate; regression?: Regression; proof?: Proof | null; unsafe_demo?: boolean;
   };
   result?: { executed: boolean; reason?: string; prs?: { service: string; number: number; url: string }[]; url?: string; number?: number; labels?: string[]; reviewers?: string[] };
+};
+
+export type ReplayCall = {
+  tool: string; args: Record<string, unknown>; status: "same" | "changed" | "not_replayed" | "error"; queries: { cypher: string; ms: number }[];
+  summary?: string | null; approval_id?: string | null; why?: string; error?: string; stored_digest?: string; now_digest?: string;
+  rows_before?: number; rows_after?: number; removed?: Record<string, unknown>[]; added?: Record<string, unknown>[];
+};
+export type ReplaySnapshot = { graph?: string; ref?: string | null; sha?: string | null; graph_version?: number; at?: number };
+export type ReplayResult = { against: string; saved: ReplaySnapshot | null; now: ReplaySnapshot; calls: ReplayCall[]; reproduced: boolean; headline: string };
+
+export type VerificationStep = { key: string; label: string; done: boolean; detail: string; state: "done" | "todo" | "failed" | "running" };
+export type Verification = {
+  approval: string; steps: VerificationStep[];
+  verdict: { state: string; targets: number; gone: number; remaining: { vuln: string; service: string }[] };
+  checks: { pr: number; state: string; runs: { name: string; status: string; conclusion: string | null; url: string | null }[] }[];
+  preflight?: { at: number; steps: { service: string; step: string; status: "passed" | "failed" | "skipped"; detail: string; ms: number }[] } | null;
 };
 
 export type WatchEvent = { id: string; at: number; kind: string; text: string; link: string | null };
@@ -255,6 +287,18 @@ export type SyncRecord = GraphDiff & {
   to_sha: string;
   ms: number;
   decisions: { decision: string; text: string; verified: boolean; remaining: number; targets: number; done_pct: number }[];
+};
+
+export type ServiceInfo = { name: string; entry: boolean; calls: string[]; packages: string[] };
+export type WhatIfChange = { op: "expose" | "unexpose" | "remove_dep" | "remove_call" | "upgrade"; service?: string; package?: string; from?: string; to?: string; label?: string };
+export type WhatIfBest = { change: WhatIfChange; label: string; risk_after: number; risk_recovered: number; routes_removed: number; kev_after: number };
+export type WhatIfResult = GraphDiff & {
+  changes: WhatIfChange[]; error?: string; assumption: string;
+  paths: { before: number; after: number; new: [string, string][]; removed: [string, string][] };
+  sensitive: { new_assets: string[]; no_longer_reachable: string[] };
+  risk: { before: number; after: number; kev_before: number; kev_after: number };
+  rank_changes: { vuln: string; service: string; before: number | null; after: number | null }[];
+  intervention: { tried: WhatIfBest[]; best: WhatIfBest | null } | null;
 };
 
 export type SyncStatus = { current: { ref: string; sha: string; at: number }; refs: string[]; history: SyncRecord[]; demo_ref: string };
@@ -341,7 +385,13 @@ export const api = {
   toolRuns: () => getJson<ToolRunSummary[]>("/api/tool-runs"),
   toolRun: (id: string) => getJson<{ id: string; tool: string; args: Record<string, unknown>; created_at: string; result: ToolResult }>(`/api/tool-runs/${id}`),
   unsafePlan: () => postJson<Plan & { gate: Gate; unsafe_demo?: boolean; items: PlanItem[] }>("/api/plans/unsafe", {}),
-  createPlan: (maxFixes = 5) => postJson<{ approval: Approval | null; plan: Plan }>("/api/plans", { max_fixes: maxFixes }),
+  createPlan: (maxFixes = 5, pick?: { variant: string; constraints: PlanConstraints }) =>
+    postJson<{ approval: Approval | null; plan: Plan; blocked?: string | null }>("/api/plans", { max_fixes: maxFixes, ...(pick ?? {}) }),
+  comparePlans: (constraints: PlanConstraints) => postJson<PlanCompare>("/api/plans/compare", { constraints }),
+  replay: (chat: string, turn: number, against: "current" | "golden") => postJson<ReplayResult>(`/api/replay/${chat}/${turn}`, { against }),
+  verification: (id: string) => getJson<Verification>(`/api/approvals/${id}/verification`),
+  preflight: (id: string) => postJson<{ preflight: Verification["preflight"] }>(`/api/approvals/${id}/preflight`, {}),
+  mergePr: (id: string, pr: number) => postJson<{ merged: boolean; sha: string | null; message: string | null }>(`/api/approvals/${id}/merge`, { pr }),
   approvals: () => getJson<Approval[]>("/api/approvals"),
   approval: (id: string) => getJson<Approval>(`/api/approvals/${id}`),
   approve: (id: string) => postJson<Approval>(`/api/approvals/${id}/approve`, {}),
@@ -354,6 +404,8 @@ export const api = {
   syncStatus: () => getJson<SyncStatus>("/api/sync"),
   sync: (ref: string) => postJson<SyncRecord>("/api/sync", { ref }),
   whatIf: (service: string) => postJson<WhatIf>("/api/whatif", { service }),
+  services: () => getJson<ServiceInfo[]>("/api/services"),
+  whatIfChanges: (changes: WhatIfChange[], findBest = true) => postJson<WhatIfResult>("/api/whatif", { changes, find_best: findBest }),
   reset: () => postJson<{ reset: boolean; ref: string }>("/api/reset", {}),
   impact: (pr: number, source: "history" | "fork") => postJson<{ report: ImpactReport | null; approval: Approval | null; error?: string; run_id?: string }>("/api/impact", { pr, source }),
 };

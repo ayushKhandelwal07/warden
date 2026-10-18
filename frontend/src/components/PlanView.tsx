@@ -1,4 +1,5 @@
 import type { Plan } from "../lib/api";
+import { MemoryNotes } from "./MemoryNotes";
 
 export function Delta({ label, before, after, fmt = (n: number) => n.toLocaleString() }: { label: string; before: number; after: number; fmt?: (n: number) => string }) {
   return (
@@ -18,6 +19,7 @@ export function PlanView({ plan }: { plan: Plan }) {
   const a = plan.after;
   return (
     <div className="flex flex-col gap-5">
+      {plan.memory && <MemoryNotes memory={plan.memory} />}
       <div className="grid grid-cols-1 divide-line rounded-card border border-line sm:grid-cols-3 sm:divide-x">
         <Delta label="Reachable exposures" before={b.findings} after={a.findings} />
         <Delta label="KEV exposures" before={b.kev_findings} after={a.kev_findings} />

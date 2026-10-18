@@ -1,8 +1,10 @@
 import { useState } from "react";
-import { FlaskConical, RefreshCw, RotateCcw } from "lucide-react";
-import { api, notifyApprovalsChanged, type DiffFinding, type GraphDiff, type SyncRecord, type WhatIf } from "../lib/api";
+import { RefreshCw, RotateCcw } from "lucide-react";
+import { api, notifyApprovalsChanged, type DiffFinding, type GraphDiff, type SyncRecord } from "../lib/api";
 import { useApi } from "../lib/useApi";
 import { Delta } from "../components/PlanView";
+import { ExposureTimeline } from "../components/ExposureTimeline";
+import { WhatIfBuilder } from "../components/WhatIfBuilder";
 import { Button, EmptyState, Window } from "../components/ui";
 
 function FindingList({ title, items, empty, show = 8 }: { title: string; items: DiffFinding[]; empty: string; show?: number }) {
@@ -114,50 +116,6 @@ function SyncResult({ r }: { r: SyncRecord }) {
   );
 }
 
-function WhatIfPanel() {
-  const services = ["paymentservice", "checkoutservice", "cartservice", "emailservice", "loadgenerator"];
-  const [svc, setSvc] = useState(services[0]);
-  const [state, setState] = useState<{ busy: boolean; r?: WhatIf; error?: string }>({ busy: false });
-  return (
-    <div className="rounded-card border border-line p-6">
-      <h2 className="text-h2 font-semibold">What if a service became internet-facing?</h2>
-      <p className="mt-1 text-small text-muted">
-        Rehearsed on a GRAPH.COPY with a public LoadBalancer added, then deleted. Nothing in the live graph changes.
-      </p>
-      <div className="mt-4 flex flex-wrap items-center gap-2">
-        {services.map((s) => (
-          <button
-            key={s}
-            onClick={() => setSvc(s)}
-            className={`h-8 rounded-full px-3 text-[12px] font-medium ${svc === s ? "bg-ink text-white" : "border border-line text-muted hover:text-ink"}`}
-          >
-            {s}
-          </button>
-        ))}
-        <Button
-          icon={<FlaskConical size={15} />}
-          disabled={state.busy}
-          onClick={() => {
-            setState({ busy: true });
-            api
-              .whatIf(svc)
-              .then((r) => setState(r.error ? { busy: false, error: r.error } : { busy: false, r }))
-              .catch((e: Error) => setState({ busy: false, error: e.message }));
-          }}
-        >
-          {state.busy ? "Rehearsing…" : "Rehearse"}
-        </Button>
-      </div>
-      {state.error && <p className="mt-4 text-small text-accent">{state.error}</p>}
-      {state.r && (
-        <div className="rise-in mt-6">
-          <DiffView d={state.r} />
-        </div>
-      )}
-    </div>
-  );
-}
-
 export function Sync() {
   const status = useApi(api.syncStatus);
   const [ref, setRef] = useState<string | null>(null);
@@ -244,7 +202,8 @@ export function Sync() {
 
       <div className="mt-10 flex flex-col gap-10">
         {state.r && <SyncResult r={state.r} />}
-        <WhatIfPanel />
+        <WhatIfBuilder renderDiff={(d) => <DiffView d={d} />} />
+        <ExposureTimeline />
         {s.history.length > 0 && (
           <div className="flex flex-col gap-2">
             <h3 className="text-small font-medium text-muted">Earlier syncs</h3>

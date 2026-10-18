@@ -4,7 +4,7 @@ import { api, type EvalCard, type EvalScenario } from "../lib/api";
 import { useApi } from "../lib/useApi";
 import { Button, EmptyState } from "../components/ui";
 
-const CATEGORY: Record<string, string> = { reachability: "Reachability", gate: "Fix gate", abstain: "Abstain", priority: "Priority order" };
+const CATEGORY: Record<string, string> = { reachability: "Reachability", gate: "Fix gate", abstain: "Abstain", priority: "Priority order", choke: "Choke point", memory: "Decision memory" };
 
 function Mark({ ok }: { ok: boolean }) {
   return ok ? <Check size={14} className="shrink-0 text-ok" aria-label="pass" /> : <X size={14} className="shrink-0 text-accent" aria-label="fail" />;
