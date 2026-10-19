@@ -1085,7 +1085,7 @@ function UnderTheHood({ data }: { data: PublicOverview | null | undefined }) {
 
 const NEXT_STEPS = [
   { icon: Users, title: "Create an account", note: "Email and password, about 30 seconds." },
-  { icon: Network, title: "Land in the project", note: "A live FalkorDB graph of Google Microservices." },
+  { icon: Network, title: "Land in the project", note: "A live FalkorDB graph of microservices-demo, or of your own repository." },
   { icon: MessageSquare, title: "Ask what to fix first", note: "Get the answer with the path that proves it." },
   { icon: GitPullRequest, title: "Invite your team", note: "Share a link; everyone asks the same graph." },
 ];

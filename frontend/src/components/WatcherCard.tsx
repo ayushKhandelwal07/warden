@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { useProject } from "../lib/auth";
 import { Eye, FlaskConical, RotateCcw, ScanSearch } from "lucide-react";
 import { api, notifyApprovalsChanged, type WatchSnapshot } from "../lib/api";
+import { useExamples } from "../lib/useExamples";
 
 const KIND_DOT: Record<string, string> = { proposal: "bg-accent", verified: "bg-ok", merged: "bg-ok", gate: "bg-ink", change: "bg-muted", sync: "bg-muted", watch: "bg-line" };
 
@@ -14,7 +15,9 @@ function ago(ms: number | null) {
 
 /** The autonomous watcher: on/off, a manual check, a one-click real change on the fork, and what it did on its own. */
 export function WatcherCard({ onChange, embedded }: { onChange?: () => void; embedded?: boolean }) {
-  const { to } = useProject();
+  const { to, slug } = useProject();
+  // The demo change edits a Kubernetes manifest, so it's offered only when the graph has an internal service declared in one.
+  const demo = useExamples(slug)?.exposable ?? null;
   const [snap, setSnap] = useState<WatchSnapshot | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
@@ -71,12 +74,16 @@ export function WatcherCard({ onChange, embedded }: { onChange?: () => void; emb
         <button disabled={!!busy || off} onClick={() => run("check", () => api.watchCheck())} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-line px-3.5 text-[12.5px] font-medium hover:border-ink disabled:opacity-40">
           <ScanSearch size={14} /> {busy === "check" ? "Checking…" : "Check now"}
         </button>
-        <button disabled={!!busy || off} onClick={() => run("expose", () => api.watchSimulate("paymentservice", true))} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-line px-3.5 text-[12.5px] font-medium hover:border-ink disabled:opacity-40" title="Commits a one-line change to your fork: paymentservice becomes internet-facing">
-          <FlaskConical size={14} /> {busy === "expose" ? "Committing…" : "Make paymentservice public"}
-        </button>
-        <button disabled={!!busy || off} onClick={() => run("undo", () => api.watchSimulate("paymentservice", false))} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-line px-3.5 text-[12.5px] text-muted hover:text-ink disabled:opacity-40">
-          <RotateCcw size={14} /> Undo
-        </button>
+        {demo && (
+          <>
+            <button disabled={!!busy || off} onClick={() => run("expose", () => api.watchSimulate(demo, true))} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-line px-3.5 text-[12.5px] font-medium hover:border-ink disabled:opacity-40" title={`Commits a one-line change to the repository: ${demo} becomes internet-facing`}>
+              <FlaskConical size={14} /> {busy === "expose" ? "Committing…" : `Make ${demo} public`}
+            </button>
+            <button disabled={!!busy || off} onClick={() => run("undo", () => api.watchSimulate(demo, false))} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-line px-3.5 text-[12.5px] text-muted hover:text-ink disabled:opacity-40">
+              <RotateCcw size={14} /> Undo
+            </button>
+          </>
+        )}
       </div>
       {msg && <p className="px-4 pt-3 text-small text-accent">{msg}</p>}
 

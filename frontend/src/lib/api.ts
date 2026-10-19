@@ -319,7 +319,11 @@ export type WhatIf = GraphDiff & { service: string; graph: string; deleted: bool
 
 export type User = { id: string; email: string; name: string };
 export type Org = { id: string; name: string; personal: boolean; role: "owner" | "admin" | "member" };
-export type Project = { id: string; slug: string; name: string; org_id: string; org_name: string; graph: string; repo_url: string | null; ref: string | null; status: string; status_detail: string | null };
+export type GithubRepo = { full_name: string; owner: string; name: string; fork: boolean; default_branch: string; push: boolean; private: boolean };
+export type Project = { gh_owner?: string | null; gh_repo?: string | null; gh_base?: string | null; id: string; slug: string; name: string; org_id: string; org_name: string; graph: string; repo_url: string | null; ref: string | null; status: "ready" | "queued" | "building" | "failed" | string; status_detail: string | null; demo?: boolean };
+/** Names from the current project's graph, for suggested questions and form defaults. Any can be null in a small graph. */
+export type ExampleNames = { services: string[]; service: string | null; caller: string | null; public: string | null; asset: string | null; vuln: string | null; package: string | null; vuln_service: string | null; person: string | null; pr: number | null; exposable: string | null };
+export type RepoChoice = { owner: string; repo: string; base: string };
 export type Me = { user: User; orgs: Org[]; projects: Project[] };
 export type Member = { user_id: string; name: string; email: string; role: Org["role"]; joined_at: string };
 export type Conversation = { id: string; kind: "ask" | "impact"; title: string; shared: boolean; mine: boolean; owner: string | null; created_at: string; updated_at: string };
@@ -377,7 +381,10 @@ export const api = {
   createInvite: (org: string, role = "member") => postJson<{ token: string; role: string; expires_at: string }>(`/api/orgs/${org}/invites`, { role }),
   setRole: (org: string, member: string, role: string) => patchJson<Member[]>(`/api/orgs/${org}/members/${member}`, { role }),
   removeMember: (org: string, member: string) => del<{ ok: boolean }>(`/api/orgs/${org}/members/${member}`),
-  createProject: (orgId: string, name: string) => postJson<Me & { project: Project }>("/api/projects", { org_id: orgId, name }),
+  createProject: (orgId: string, name: string, repo?: RepoChoice) => postJson<Me & { project: Project }>("/api/projects", { org_id: orgId, name, ...(repo ?? {}) }),
+  project: (id: string) => getJson<Project>(`/api/projects/${id}`),
+  rebuildProject: (id: string) => postJson<Project>(`/api/projects/${id}/rebuild`, {}),
+  examples: () => getJson<ExampleNames>("/api/examples"),
   deleteProject: (id: string) => del<Me>(`/api/projects/${id}`),
   invite: (token: string) => getJson<InviteInfo>(`/api/invites/${token}`),
   conversations: (kind: "ask" | "impact" = "ask") => getJson<Conversation[]>(`/api/conversations?kind=${kind}`),
@@ -413,6 +420,10 @@ export const api = {
   approve: (id: string) => postJson<Approval>(`/api/approvals/${id}/approve`, {}),
   reject: (id: string, reason: string) => postJson<Approval>(`/api/approvals/${id}/reject`, { reason }),
   github: () => getJson<GithubStatus>("/api/github"),
+  githubCheck: () => getJson<{ configured: boolean; target?: string; checked?: string[]; missing?: string[]; matches?: boolean }>("/api/github/check"),
+  githubRepos: () => getJson<GithubRepo[]>("/api/github/repos"),
+  githubBranches: (repo: string) => getJson<string[]>(`/api/github/branches?repo=${encodeURIComponent(repo)}`),
+  setProjectGithub: (id: string, owner: string, repo: string, base: string) => request<Project>("PUT", `/api/projects/${id}/github`, { owner, repo, base }),
   watch: () => getJson<WatchSnapshot>("/api/watch"),
   watchEnable: (enabled: boolean) => postJson<{ state: WatchState }>("/api/watch/enable", { enabled }),
   watchCheck: () => postJson<WatchSnapshot & { result: { ok: boolean; status?: string; synced?: boolean; proposals?: string[] } }>("/api/watch/check", {}),

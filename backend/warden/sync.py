@@ -2,7 +2,7 @@
 
     sync(ref)      snapshot live -> org_<t>_prev, re-ingest at `ref`, diff prev vs live, verify Decisions
     what_if(svc)   rehearse "this service becomes internet-facing" on a GRAPH.COPY and diff it
-    reset()        golden snapshot -> live, clear agent state, repo back to the demo ref
+    reset()        golden snapshot -> live, clear agent state, repo back to the ref the graph was built from
 """
 import json
 import time
@@ -28,9 +28,14 @@ def current_ref() -> dict:
 
 
 def available_refs() -> list[str]:
-    tags = [t for t in repo.git("tag", "--sort=creatordate").split() if t.startswith("v0.") and t.count(".") == 2]
-    start = tags.index(config.DEMO_REF) if config.DEMO_REF in tags else 0
-    return tags[start:]
+    """What the graph can be re-read at. The demo: microservices-demo releases from the pinned one on. Another repo:
+    the branch it was built from, then its newest tags."""
+    if config.is_demo_source():
+        tags = [t for t in repo.git("tag", "--sort=creatordate").split() if t.startswith("v0.") and t.count(".") == 2]
+        start = tags.index(config.DEMO_REF) if config.DEMO_REF in tags else 0
+        return tags[start:]
+    tags = repo.git("tag", "--sort=-creatordate").split()[:10]
+    return [config.source_ref(), *[t for t in tags if t != config.source_ref()]]
 
 
 def _findings(graph_name: str) -> dict:
@@ -143,9 +148,8 @@ def sync(ref: str) -> dict:
 
 
 def sync_fork(branch: str) -> dict:
-    """Re-read the graph from the fork's branch (the repo the agent acts on), not from upstream."""
-    repo.fetch_fork(branch)
-    return sync(f"{repo.FORK_REMOTE}/{branch}")
+    """Re-read the graph from the branch the project acts on (for the demo: the fork's branch, not upstream)."""
+    return sync(repo.fetch_fork(branch))
 
 
 def what_if_expose(service: str) -> dict:
@@ -177,11 +181,11 @@ def history() -> list[dict]:
 
 
 def reset() -> dict:
-    """Back to the clean demo state: golden graph, no agent state, repo at the demo ref."""
+    """Back to the clean state: golden graph, no agent state, repo at the ref the graph was first built from."""
     if not graph_exists(config.golden_graph_name()):
         raise RuntimeError("No golden snapshot; run `python -m warden.ingest --snapshot` first")
     copy_graph(config.golden_graph_name(), config.org_graph_name())
     delete_graph(approvals.agents_graph())
     delete_graph(prev_graph())
-    repo.ensure_repo(config.DEMO_REF)
+    repo.ensure_repo(config.source_ref())
     return {"reset": True, **current_ref()}

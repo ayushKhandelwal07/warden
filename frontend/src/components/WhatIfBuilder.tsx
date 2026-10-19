@@ -1,7 +1,9 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { FlaskConical, Plus, X } from "lucide-react";
 import { api, type GraphDiff, type ServiceInfo, type WhatIfChange, type WhatIfResult } from "../lib/api";
+import { useProject } from "../lib/auth";
 import { useApi } from "../lib/useApi";
+import { useExamples } from "../lib/useExamples";
 import { AttackSurfaceMap } from "./AttackSurfaceMap";
 import { Delta } from "./PlanView";
 
@@ -31,11 +33,23 @@ export function WhatIfBuilder({ renderDiff }: { renderDiff: (d: GraphDiff) => Re
   const list: ServiceInfo[] = svcs.data ?? [];
   const names = list.map((s) => s.name);
   const packages = [...new Set(list.flatMap((s) => s.packages))].sort();
+  const { slug } = useProject();
+  const ex = useExamples(slug);
   const [op, setOp] = useState<WhatIfChange["op"]>("expose");
-  const [svc, setSvc] = useState("paymentservice");
-  const [to, setTo] = useState("paymentservice");
-  const [from, setFrom] = useState("checkoutservice");
-  const [pkg, setPkg] = useState("golang.org/x/net");
+  const [svc, setSvc] = useState("");
+  const [to, setTo] = useState("");
+  const [from, setFrom] = useState("");
+  const [pkg, setPkg] = useState("");
+  useEffect(() => {
+    // Defaults come from this project's graph: the service worth protecting, a service that calls it, the top advisory's package.
+    if (!names.length) return;
+    const main = ex?.service && names.includes(ex.service) ? ex.service : names[0];
+    setSvc((v) => v || main);
+    setTo((v) => v || main);
+    setFrom((v) => v || ex?.caller || names.find((n) => n !== main) || main);
+    setPkg((v) => v || ex?.package || packages[0] || "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [names.length, ex]);
   const [changes, setChanges] = useState<WhatIfChange[]>([]);
   const [st, setSt] = useState<{ busy: boolean; r?: WhatIfResult; error?: string }>({ busy: false });
 
@@ -54,14 +68,14 @@ export function WhatIfBuilder({ renderDiff }: { renderDiff: (d: GraphDiff) => Re
   const r = st.r;
   const best = r?.intervention?.best;
   useEffect(() => {
-    // Show the example straight away: "expose paymentservice" is the story in one click.
-    if (!names.length || st.r || st.busy || changes.length) return;
-    const first: WhatIfChange = { op: "expose", service: names.includes("paymentservice") ? "paymentservice" : names[0] };
+    // Show the example straight away: exposing the service worth protecting is the story in one click.
+    if (!names.length || !ex || st.r || st.busy || changes.length) return;
+    const first: WhatIfChange = { op: "expose", service: ex.service && names.includes(ex.service) ? ex.service : names[0] };
     setChanges([first]);
     setSt({ busy: true });
     api.whatIfChanges([first]).then((x) => setSt({ busy: false, r: x }), (e: Error) => setSt({ busy: false, error: e.message }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [names.length]);
+  }, [names.length, ex]);
 
   return (
     <div className="rounded-card border border-line p-6">

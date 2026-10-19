@@ -58,7 +58,22 @@ export function AttackSurfaceMap({ whatIfPaths, compact, publicData }: { whatIfP
   const [width, setWidth] = useState(900);
   const [selected, setSelected] = useState<string | null>(null);
   const [secure, setSecure] = useState(false);
-  const d = surf.data;
+  // The API can be deployed independently from the frontend. Older/partial
+  // surface payloads may omit arrays added by a newer frontend, so normalize
+  // them before memoized graph construction or a missing field crashes render.
+  const d = surf.data
+    ? {
+        ...surf.data,
+        services: Array.isArray(surf.data.services)
+          ? surf.data.services.map((service) => ({ ...service, reads: Array.isArray(service.reads) ? service.reads : [] }))
+          : [],
+        assets: Array.isArray(surf.data.assets) ? surf.data.assets : [],
+        calls: Array.isArray(surf.data.calls) ? surf.data.calls : [],
+        kev_path: Array.isArray(surf.data.kev_path) ? surf.data.kev_path : [],
+        routes: Array.isArray(surf.data.routes) ? surf.data.routes : [],
+        entry: Array.isArray(surf.data.entry) ? surf.data.entry : [],
+      }
+    : null;
   const ranking = useMemo(() => (d ? chokeRank(d.routes) : []), [d]);
   const target = selected ?? (ranking.length ? ranking[0][0] : null);
   const secured = secure ? target : null;
@@ -104,7 +119,10 @@ export function AttackSurfaceMap({ whatIfPaths, compact, publicData }: { whatIfP
         position: pos.get(s.name),
       })),
       ...d.assets.map((a) => ({ data: { id: `@${a.name}`, label: a.name, kind: "asset", size: 26 }, position: pos.get(`@${a.name}`) })),
-      ...d.entry.map((e) => ({ data: { id: `@internet>${e}`, source: "@internet", target: e, kev: 1, kind: "net" } })),
+      // an entry edge is on the KEV route only when the entry service carries a KEV exposure or the route continues from it
+      ...d.entry.map((e) => ({
+        data: { id: `@internet>${e}`, source: "@internet", target: e, kev: d.services.some((s) => s.name === e && s.kev) || d.kev_path.some((p) => p.from === e) ? 1 : 0, kind: "net" },
+      })),
       // a what-if that exposes another service draws its new entry edge too
       ...[...new Set((whatIfPaths ?? []).map(([route]) => route.split(" → ")[0]))]
         .filter((s) => !d.entry.includes(s) && pos.has(s))
@@ -186,7 +204,7 @@ export function AttackSurfaceMap({ whatIfPaths, compact, publicData }: { whatIfP
         <div className="min-w-0 flex-1">
           <h3 className="text-[14px] font-semibold">Attack surface</h3>
           <p className="text-[12px] text-muted">
-            {d.services.length} services by hop distance from the internet. Click any service to choose what to secure. Size is risk; {kevCount} service{kevCount === 1 ? "" : "s"} carry a CISA KEV exposure (orange), and the thick route shows how an attacker gets there.
+            {d.services.length} service{d.services.length === 1 ? "" : "s"} by hop distance from the internet. Click any service to choose what to secure. Size is risk; {kevCount} {kevCount === 1 ? "service carries" : "services carry"} a CISA KEV exposure (orange), and the thick route shows how an attacker gets there.
           </p>
         </div>
         {!compact && target && (
@@ -210,10 +228,10 @@ export function AttackSurfaceMap({ whatIfPaths, compact, publicData }: { whatIfP
       {overlay && (
         <p className="border-t border-line bg-code/40 px-4 py-2.5 text-[12.5px]">
           {total - left.length === 0 ? (
-            <>No internet-to-card-and-personal-data path goes through <span className="font-mono font-medium">{overlay.secured}</span>, so securing it changes nothing there. Try checkoutservice.</>
+            <>No internet-to-sensitive-data path goes through <span className="font-mono font-medium">{overlay.secured}</span>, so securing it changes nothing there.</>
           ) : (
             <>
-              Securing <span className="font-mono font-medium">{overlay.secured}</span> cuts {total - left.length} of {total} internet-to-card-and-personal-data paths (dashed).{" "}
+              Securing <span className="font-mono font-medium">{overlay.secured}</span> cuts {total - left.length} of {total} internet-to-sensitive-data paths (dashed).{" "}
               {stillReachable.length ? <>Still reachable by another route: <span className="font-medium">{stillReachable.join(", ")}</span> (solid dark).</> : "Nothing sensitive stays reachable."}
             </>
           )}

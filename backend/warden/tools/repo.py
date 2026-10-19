@@ -85,7 +85,7 @@ def graph_query(trace: Trace, cypher, graph_name=None):
 def repo_info(trace: Trace, limit, graph_name=None):
     _need_github()
     meta = github.read("")
-    base = config.GITHUB_BASE or meta["default_branch"]
+    base = config.gh_base() or meta["default_branch"]
     commits = github.read("/commits", {"sha": base, "per_page": limit})
     pulls = github.read("/pulls", {"state": "open", "per_page": limit})
     issues = [i for i in github.read("/issues", {"state": "open", "per_page": limit}) if "pull_request" not in i]
@@ -136,7 +136,7 @@ RETURN p.name AS name, p.login AS login, count(DISTINCT c) AS commits, collect(D
             u = github.read_user(q)
             rows.append({"source": "github", "fact": "profile", "value": f"{u.get('name') or u['login']} · {u.get('public_repos', 0)} public repos · joined {str(u.get('created_at'))[:10]}" + (f" · {u['bio']}" if u.get("bio") else "")})
             role = github.role_of(u["login"])
-            rows.append({"source": "github", "fact": f"role on {config.GITHUB_OWNER}/{config.GITHUB_REPO}", "value": role})
+            rows.append({"source": "github", "fact": f"role on {config.gh_owner()}/{config.gh_repo()}", "value": role})
             for c in github.read("/commits", {"author": u["login"], "per_page": 5}):
                 rows.append({"source": "github", "fact": "commit on the fork", "value": f"{c['sha'][:7]} {c['commit']['message'].splitlines()[0][:80]} ({c['commit']['author']['date'][:10]})"})
             for p in github.read("/pulls", {"state": "all", "per_page": 30}):

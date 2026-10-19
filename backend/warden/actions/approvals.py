@@ -42,7 +42,12 @@ def create(kind: str, title: str, summary: str, payload: dict, requested_by: str
 
 
 def get(aid: str) -> dict | None:
-    rows, _ = ro("MATCH (a:Approval {id: $id}) RETURN a", {"id": aid}, agents_graph())
+    try:
+        rows, _ = ro("MATCH (a:Approval {id: $id}) RETURN a", {"id": aid}, agents_graph())
+    except Exception as e:  # the agents graph does not exist until the first approval is created (a clean state)
+        if "empty key" in str(e):
+            return None
+        raise
     return _row_to_dict(rows[0]["a"]) if rows else None
 
 

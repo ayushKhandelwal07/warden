@@ -1,19 +1,30 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { ArrowUp, Check, Lock, Pencil, Share2, Users } from "lucide-react";
-import { api, CONVERSATIONS_CHANGED, notifyApprovalsChanged, notifyConversationsChanged, type ConversationDetail } from "../lib/api";
+import { api, CONVERSATIONS_CHANGED, notifyApprovalsChanged, notifyConversationsChanged, type ConversationDetail, type ExampleNames } from "../lib/api";
 import { streamAsk, type AgentEvent } from "../lib/ask";
 import { useProject } from "../lib/auth";
+import { useExamples } from "../lib/useExamples";
 import { ChatTurn, EvidencePanel, type Turn } from "../components/AgentTurn";
 import { Sheet } from "../components/Sheet";
 
-const GROUPS: { title: string; items: string[] }[] = [
-  { title: "Reachability", items: ["What should we fix first?", "Is anything in loadgenerator reachable?", "Which advisories are on CISA KEV and how does an attacker get to them?"] },
-  { title: "Choke points and blast radius", items: ["Which service should we secure first to protect card data?", "What breaks if paymentservice goes down?", "What is the shortest path from the internet to CardData?"] },
-  { title: "What if", items: ["What if paymentservice became public?", "What if checkoutservice stopped calling paymentservice?", "What if we upgraded golang.org/x/net?"] },
-  { title: "Fixes and memory", items: ["Make a fix plan for the riskiest findings", "Which fix plan is best if we cannot change major versions?", "What did we decide about CVE-2023-44487 before?"] },
-  { title: "People and evidence", items: ["Who should review a change to checkoutservice?", "Do any of our sources contradict each other about paymentservice?", "How did the exposure of frontend change over time?"] },
-];
+/** Suggested questions, built from names in the open project's graph (a question whose name is missing is left out). */
+function groups(n: ExampleNames | null): { title: string; items: string[] }[] {
+  const q = (...parts: (string | number | null | undefined | false)[]) => (parts.some((p) => p === null || p === undefined || p === false) ? null : parts.join(""));
+  const internal = n?.services.filter((s) => s !== n.public).at(-1) ?? null;
+  const svc = n?.service ?? null;
+  const out = [
+    { title: "Reachability", items: ["What should we fix first?", q("Is anything in ", internal, " reachable?"), "Which advisories are on CISA KEV and how does an attacker get to them?"] },
+    {
+      title: "Choke points and blast radius",
+      items: [n?.asset ? `Which service should we secure first to protect ${n.asset}?` : "Which service should we secure first?", q("What breaks if ", svc, " goes down?"), q("What is the shortest path from the internet to ", n?.asset ?? svc, "?")],
+    },
+    { title: "What if", items: [svc !== n?.public ? q("What if ", svc, " became public?") : null, q("What if ", n?.caller, " stopped calling ", n?.caller && svc, "?"), q("What if we upgraded ", n?.package, "?")] },
+    { title: "Fixes and memory", items: ["Make a fix plan for the riskiest findings", "Which fix plan is best if we cannot change major versions?", q("What did we decide about ", n?.vuln, " before?")] },
+    { title: "People and evidence", items: [q("Who should review a change to ", n?.caller ?? svc, "?"), q("Do any of our sources contradict each other about ", svc, "?"), q("How did the exposure of ", n?.public, " change over time?")] },
+  ];
+  return out.map((g) => ({ ...g, items: g.items.filter((s): s is string => !!s) })).filter((g) => g.items.length);
+}
 
 type ChatMeta = Omit<ConversationDetail, "messages">;
 
@@ -88,7 +99,8 @@ function ChatHeader({ chat, onChange }: { chat: ChatMeta; onChange: (c: ChatMeta
 
 export function Ask() {
   const { chatId } = useParams();
-  const { to } = useProject();
+  const { to, slug } = useProject();
+  const examples = useExamples(slug);
   const nav = useNavigate();
   const [params, setParams] = useSearchParams();
   const [q, setQ] = useState("");
@@ -226,7 +238,7 @@ export function Ask() {
                 <p className="mt-2 text-muted">Answers come only from the graph, with the path that proves them.</p>
               </div>
               <div className="grid w-full max-w-[760px] gap-3 text-left sm:grid-cols-2">
-                {GROUPS.map((g) => (
+                {groups(examples).map((g) => (
                   <div key={g.title} className="overflow-hidden rounded-card border border-line">
                     <p className="border-b border-line bg-code/50 px-3 py-1.5 text-[12px] font-medium text-muted">{g.title}</p>
                     <ul>

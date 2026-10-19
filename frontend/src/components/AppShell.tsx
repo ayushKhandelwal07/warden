@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { Navigate, Outlet, useLocation, useParams } from "react-router-dom";
 import { PanelLeftOpen } from "lucide-react";
-import { api, setApiProject, type Health } from "../lib/api";
+import { setApiProject } from "../lib/api";
 import { defaultProject, rememberProject, useAuth } from "../lib/auth";
 import { Logo } from "./Chrome";
+import { BuildStatus, useBuildPoll } from "./BuildStatus";
 import { ChatList } from "./ChatList";
 import { Sidebar } from "./Sidebar";
 
@@ -59,8 +60,8 @@ export function AppShell() {
   const wide = useWide();
   const [docked, setDocked] = useState(true);
   const [drawer, setDrawer] = useState(false);
-  const [health, setHealth] = useState<{ data: Health | null; error: Error | null }>({ data: null, error: null });
   const project = me?.projects.find((p) => p.slug === slug);
+  const buildDetail = useBuildPoll(project);
 
   // Every request below is scoped to this project. Set during render so children's first fetch already has it.
   if (project) setApiProject(project.slug);
@@ -68,7 +69,6 @@ export function AppShell() {
   useEffect(() => {
     if (!project) return;
     rememberProject(project.slug);
-    api.health().then((data) => setHealth({ data, error: null }), (error: Error) => setHealth({ data: null, error }));
   }, [project]);
 
   useEffect(() => setDrawer(false), [loc.pathname]);
@@ -95,7 +95,7 @@ export function AppShell() {
     <div className="flex min-h-screen bg-bg" style={{ "--topbar": bar ? "56px" : "0px" } as React.CSSProperties}>
       {wide && docked && (
         <div className="sticky top-0 h-screen shrink-0">
-          <Sidebar health={health.data} healthError={health.error} onClose={close}>
+          <Sidebar onClose={close}>
             {recents}
           </Sidebar>
         </div>
@@ -103,7 +103,7 @@ export function AppShell() {
       {!wide && drawer && (
         <div className="fixed inset-0 z-50 flex">
           <div className="rise-in h-full shadow-window">
-            <Sidebar health={health.data} healthError={health.error} onClose={close}>
+            <Sidebar onClose={close}>
               {recents}
             </Sidebar>
           </div>
@@ -121,7 +121,17 @@ export function AppShell() {
           </div>
         )}
         <main className="min-w-0 flex-1">
-          <Outlet key={project.slug} />
+          {/* Until the graph is built there is nothing to show but the build; settings stay reachable to change the repo. */}
+          {project.status !== "ready" && !loc.pathname.includes("/settings") ? (
+            <BuildStatus
+              project={project}
+              detail={buildDetail}
+              canEdit={["owner", "admin"].includes(me.orgs.find((o) => o.id === project.org_id)?.role ?? "")}
+              settings={`/app/${project.slug}/settings/projects`}
+            />
+          ) : (
+            <Outlet key={`${project.slug}:${project.status_detail ?? ""}`} />
+          )}
         </main>
       </div>
     </div>

@@ -14,6 +14,12 @@ SEVERITY_DEFAULT = {"CRITICAL": 0.95, "HIGH": 0.8, "MEDIUM": 0.55, "LOW": 0.3, "
 EPSS_SIGNAL = 0.1
 
 TIER_ASSUMPTION = "Reachability follows CALLS edges inferred from manifest environment variables. Function-level reachability is not analysed."
+INFERRED_EXPOSURE = ("This repository has no deployment manifests, so which services face the internet is inferred from the code "
+                     "(a web framework or an exposed port), not read from configuration.")
+
+
+def assumption(inferred_exposure: bool) -> str:
+    return f"{TIER_ASSUMPTION} {INFERRED_EXPOSURE}" if inferred_exposure else TIER_ASSUMPTION
 
 
 def tier_of(kev: bool, epss: float | None) -> str:

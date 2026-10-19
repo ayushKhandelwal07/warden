@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { api, type ServiceInfo, type ToolResult } from "../lib/api";
+import { useProject } from "../lib/auth";
 import { useApi } from "../lib/useApi";
+import { useExamples } from "../lib/useExamples";
 
 const LABEL: Record<string, string> = {
   exposure_closed: "closed",
@@ -21,17 +23,26 @@ const LABEL: Record<string, string> = {
 /** What happened over time to a service or an advisory: ledger events, decisions, KEV listing. History is never rewritten. */
 export function ExposureTimeline() {
   const svcs = useApi(api.services);
-  const [target, setTarget] = useState<{ kind: "vuln" | "service"; value: string }>({ kind: "vuln", value: "CVE-2023-44487" });
+  const ex = useExamples(useProject().slug);
+  // Starts on this project's top advisory (or its first service when it has none).
+  const [target, setTarget] = useState<{ kind: "vuln" | "service"; value: string } | null>(null);
   const [res, setRes] = useState<{ busy: boolean; r?: ToolResult; error?: string }>({ busy: true });
   const names: ServiceInfo[] = svcs.data ?? [];
+  useEffect(() => {
+    if (target || !ex) return;
+    const first = ex.vuln ? { kind: "vuln" as const, value: ex.vuln } : ex.services[0] ? { kind: "service" as const, value: ex.services[0] } : null;
+    if (first) setTarget(first);
+    else setRes({ busy: false, error: "This graph has no services yet." });
+  }, [ex, target]);
 
   useEffect(() => {
+    if (!target) return;
     setRes({ busy: true });
     api.runTool("exposure_timeline", { [target.kind]: target.value, limit: 30 }, false).then(
       (r) => setRes({ busy: false, r }),
       (e: Error) => setRes({ busy: false, error: e.message }),
     );
-  }, [target.kind, target.value]);
+  }, [target?.kind, target?.value]);
 
   return (
     <div className="rounded-card border border-line p-6">
@@ -39,7 +50,7 @@ export function ExposureTimeline() {
       <p className="mt-1 text-small text-muted">The graph shows today. This is how it got here: every sync records what opened and closed. A fixed advisory is history, never active.</p>
       <div className="mt-4 flex flex-wrap items-center gap-2">
         <select
-          value={target.kind === "service" ? target.value : ""}
+          value={target?.kind === "service" ? target.value : ""}
           onChange={(e) => e.target.value && setTarget({ kind: "service", value: e.target.value })}
           className="h-9 rounded-full border border-line bg-bg px-3 text-[13px]"
           aria-label="Service"
@@ -50,8 +61,9 @@ export function ExposureTimeline() {
           ))}
         </select>
         <input
-          defaultValue={target.kind === "vuln" ? target.value : ""}
-          placeholder="or an advisory id, e.g. CVE-2023-44487"
+          key={target?.kind === "vuln" ? target.value : "service"}
+          defaultValue={target?.kind === "vuln" ? target.value : ""}
+          placeholder={`or an advisory id${ex?.vuln ? `, e.g. ${ex.vuln}` : ""}`}
           onKeyDown={(e) => {
             const v = (e.target as HTMLInputElement).value.trim();
             if (e.key === "Enter" && v) setTarget({ kind: "vuln", value: v });

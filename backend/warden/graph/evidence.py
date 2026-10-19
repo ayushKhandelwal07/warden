@@ -61,10 +61,18 @@ def provenance(rel: str, p: dict) -> dict:
            curated   written by the team (ownership, data sensitivity)
     """
     url = p.get("source_url")
-    if rel == "REACHES":
-        return {"kind": "sourced", "source": "Kubernetes Service of type LoadBalancer", "url": None}
-    if rel == "EXPOSED_VIA":
-        return {"kind": "sourced", "source": "Kubernetes manifest: the service is behind the public LoadBalancer", "url": url}
+    if rel in ("REACHES", "EXPOSED_VIA"):  # `kind` is how the entry point was declared (graphs built before it: LoadBalancer)
+        kind = p.get("kind") or "LoadBalancer"
+        if kind == "Inferred":
+            return {"kind": "inferred", "source": "no deployment manifest: the code serves HTTP (web framework or EXPOSE)", "url": url,
+                    "note": "Internet exposure is assumed from the code, not read from configuration."}
+        if kind == "PublishedPort":
+            return {"kind": "sourced", "source": "docker-compose publishes a port of the service", "url": url}
+        if kind == "Ingress":
+            return {"kind": "sourced", "source": "Kubernetes Ingress routes to the service", "url": url}
+        if rel == "REACHES":
+            return {"kind": "sourced", "source": f"Kubernetes Service of type {kind}", "url": None}
+        return {"kind": "sourced", "source": f"Kubernetes manifest: the service is behind the public {kind}", "url": url}
     if rel == "CALLS":
         return {"kind": "inferred", "source": f"{p.get('via', 'rpc')} address in env var {p.get('env_var')}", "url": url,
                 "note": "Derived from configuration; no traffic was observed."}

@@ -6,7 +6,7 @@ import json
 from warden import config
 
 # Bump when the shape of a cached result changes (the graph version only tracks data, not code).
-SCHEMA = 2
+SCHEMA = 3
 TTL = 600 # seconds; versioning does the invalidation, the TTL only bounds memory
 PREFIX = "warden:cache"
 

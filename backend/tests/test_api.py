@@ -41,7 +41,7 @@ def test_signed_out_requests_are_refused_but_health_is_public():
 
 def test_signup_joins_the_demo_project_and_a_personal_team():
     assert ME["user"]["name"] == "Test User"
-    assert [p["slug"] for p in ME["projects"]] == ["online-boutique"]
+    assert [p["slug"] for p in ME["projects"]] == ["microservices-demo"]
     assert ME["projects"][0]["graph"] == "org_demo"
     assert {o["role"] for o in ME["orgs"]} == {"owner", "member"}
     assert client.get("/api/auth/me").json()["user"]["id"] == ME["user"]["id"]
@@ -344,3 +344,12 @@ def test_replay_events_reports_changed_rows_and_errors_without_touching_the_grap
     calls = replay.replay_events(ev, None, lambda *a, **k: next(outs))
     assert [c["status"] for c in calls] == ["changed", "same", "error"]
     assert calls[0]["removed"] == [{"service": "b"}] and calls[0]["added"] == [] and calls[0]["summary_after"] == "s2"
+
+
+@live
+def test_approval_lookup_works_when_nothing_was_ever_filed(monkeypatch):
+    from warden.actions import approvals as ap
+
+    monkeypatch.setattr(ap, "agents_graph", lambda: "agents_never_created_for_test")
+    assert ap.get("apr_missing") is None
+    assert ap.list_all() == []

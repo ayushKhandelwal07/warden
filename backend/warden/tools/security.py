@@ -2,7 +2,7 @@
 from warden.graph.evidence import Evidence
 from warden.tools.base import Param, Result, ToolError, Trace, tool
 from warden.tools.common import resolve_service, resolve_vulnerability
-from warden.tools.risk import TIER_ASSUMPTION, risk_factors, tier_of
+from warden.tools.risk import assumption, risk_factors, tier_of
 
 SEVERITIES = ["CRITICAL", "HIGH", "MEDIUM", "LOW", "UNKNOWN"]
 
@@ -127,7 +127,7 @@ WHERE ($service IS NULL OR s.name = $service) AND v.severity IN $severities RETU
             f"under the current topology model; {signal} of them carry an exploit signal (CISA KEV or EPSS of 10% or more). "
             f"Highest risk: {top['vuln']} in {top['package']} on {top['service']} "
             f"({intel}, {top['hops']} hop(s) from the internet), tier {top['tier']}, risk {top['risk']}, driven by {top['driver']}. "
-            f"Assumption: {TIER_ASSUMPTION}"
+            f"Assumption: {assumption(trace.ro('MATCH (i:Ingress {kind: $k}) RETURN count(i) AS n', {'k': 'Inferred'}, graph_name)[0]['n'] > 0)}"
         )
     cols = ["risk", "tier", "vuln", "kev", "severity", "service", "hops", "package", "fixed", "driver"]
     return Result(summary, findings[:limit], cols, ev, sources=[f"https://osv.dev/vulnerability/{f['vuln']}" for f in findings[:3]])

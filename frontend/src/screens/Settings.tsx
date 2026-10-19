@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { NavLink, useNavigate, useParams } from "react-router-dom";
 import { Check, Copy, Database, Link2, Plus, Trash2, UserMinus } from "lucide-react";
-import { api, type Member, type Org } from "../lib/api";
+import { api, type Member, type Org, type RepoChoice } from "../lib/api";
 import { useAuth, useProject } from "../lib/auth";
 import { Button } from "../components/ui";
+import { RepoPicker, RepositoryCard } from "../components/RepositoryCard";
 
 const SECTIONS = [
   { key: "team", label: "Team" },
@@ -194,18 +195,21 @@ function Projects() {
   const admins = (me?.orgs ?? []).filter(canAdmin);
   const [orgId, setOrgId] = useState(admins[0]?.id ?? "");
   const [name, setName] = useState("");
+  const [repo, setRepo] = useState<RepoChoice | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<string | null>(null);
 
   const create = async (e: FormEvent) => {
     e.preventDefault();
+    if (!repo?.base) return;
     setBusy(true);
     setError(null);
     try {
-      const m = await api.createProject(orgId, name);
+      const m = await api.createProject(orgId, name, repo);
       setMe(m);
       setName("");
+      setRepo(null);
       nav(`/app/${m.project.slug}/home`);
     } catch (err) {
       setError((err as Error).message);
@@ -245,7 +249,9 @@ function Projects() {
                     <span className="inline-flex items-center gap-1 font-mono">
                       <Database size={11} /> {p.graph}
                     </span>
+                    {p.repo_url && <span className="font-mono">{p.repo_url.replace("https://github.com/", "").replace(/\.git$/, "")}</span>}
                     {p.ref && <span className="font-mono">{p.ref}</span>}
+                    {p.status !== "ready" && <span className={p.status === "failed" ? "text-accent" : "text-ink"}>{p.status === "failed" ? "Build failed" : "Building the graph…"}</span>}
                   </span>
                 </span>
                 {p.slug !== slug && (
@@ -253,7 +259,7 @@ function Projects() {
                     Open
                   </button>
                 )}
-                {canAdmin(org) && p.slug !== "online-boutique" && (
+                {canAdmin(org) && !p.demo && (
                   <button
                     onClick={() => remove(p.id, p.slug)}
                     className={`inline-flex h-9 items-center gap-1.5 rounded-full px-3 text-[12.5px] ${confirm === p.id ? "border border-accent font-medium text-accent" : "text-muted hover:bg-code hover:text-ink"}`}
@@ -268,11 +274,22 @@ function Projects() {
         </ul>
       </Panel>
 
-      <Panel title="New project" sub="Starts from the Google Microservices sample: a private copy of its graph that your team can sync, fix and decide on.">
+      {(() => {
+        const cur = me.projects.find((p) => p.slug === slug);
+        const org = me.orgs.find((o) => o.id === cur?.org_id);
+        return cur ? (
+          <Panel title={`Repository for ${cur.name}`} sub="The GitHub repository this project reads, watches and opens PRs on.">
+            <RepositoryCard key={cur.id} project={cur} canEdit={canAdmin(org)} onSaved={setMe} />
+          </Panel>
+        ) : null;
+      })()}
+
+      <Panel title="New project" sub="Builds a FalkorDB graph from a repository's own code: its services, dependencies, known advisories and history.">
         {admins.length ? (
           <form onSubmit={create} className="flex flex-col gap-3">
+            <RepoPicker value={repo} onChange={setRepo} disabled={busy} />
             <div className="flex flex-wrap gap-2">
-              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Checkout hardening" className="flex-1" aria-label="Project name" required />
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={repo?.repo ?? "Project name (defaults to the repository)"} className="flex-1" aria-label="Project name" />
               <select value={orgId} onChange={(e) => setOrgId(e.target.value)} className="h-11 rounded-full border border-line bg-bg px-4 text-small" aria-label="Team">
                 {admins.map((o) => (
                   <option key={o.id} value={o.id}>
@@ -280,13 +297,13 @@ function Projects() {
                   </option>
                 ))}
               </select>
-              <Button variant="primary" icon={<Plus size={15} />} disabled={busy || !name.trim()}>
-                {busy ? "Copying the graph…" : "Create project"}
+              <Button variant="primary" icon={<Plus size={15} />} disabled={busy || !repo?.base}>
+                {busy ? "Creating…" : "Create project"}
               </Button>
             </div>
             <p className="text-[12px] text-muted">
-              Source: {me.projects[0]?.repo_url?.replace("https://github.com/", "") ?? "Online Boutique"} at {me.projects[0]?.ref ?? "v0.8.0"}. Importing other repositories with the
-              same layout (Kubernetes manifests + one folder per service) is next on the roadmap.
+              Services come from Kubernetes manifests, a docker-compose file, or, when there are neither, the folders that hold a dependency file (package.json, go.mod,
+              requirements.txt, pom.xml, Cargo.lock and similar). The build runs in the background and takes from a few seconds to a minute.
             </p>
           </form>
         ) : (

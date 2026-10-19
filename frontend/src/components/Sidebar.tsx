@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import { Check, ChevronsUpDown, GitPullRequest, House, Inbox, LogOut, MessageSquare, PanelLeftClose, Plus, ListChecks, RefreshCw, Settings, Wrench } from "lucide-react";
-import type { Health } from "../lib/api";
 import { useAuth, useProject } from "../lib/auth";
-import { Logo, StatusDot, usePendingCount } from "./Chrome";
+import { Logo, usePendingCount } from "./Chrome";
 
 /** Closes a popover on outside click or Escape. */
 export function useDismiss<T extends HTMLElement>(open: boolean, close: () => void) {
@@ -122,7 +121,7 @@ const NAV = [
 ];
 
 /** Left rail like claude.ai: project, new chat, sections, recent items (passed in), account. */
-export function Sidebar({ health, healthError, onClose, children }: { health: Health | null; healthError: Error | null; onClose: () => void; children?: ReactNode }) {
+export function Sidebar({ onClose, children }: { onClose: () => void; children?: ReactNode }) {
   const { to } = useProject();
   const pending = usePendingCount();
   const nav = useNavigate();
@@ -167,7 +166,6 @@ export function Sidebar({ health, healthError, onClose, children }: { health: He
       </nav>
       <div className="mt-4 min-h-0 flex-1 overflow-y-auto px-3">{children}</div>
       <div className="flex shrink-0 flex-col gap-2 border-t border-line p-3">
-        <StatusDot health={health} error={healthError} up />
         <UserMenu />
       </div>
     </aside>

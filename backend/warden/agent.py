@@ -275,7 +275,7 @@ def _graph_context() -> str:
             from warden.api import accounts
 
             u = accounts.user()
-            who = f" The person asking is {u['name']} ({u['email']}); their GitHub login is {config.GITHUB_OWNER}, and they own the fork {config.GITHUB_OWNER}/{config.GITHUB_REPO}." if config.GITHUB_OWNER else f" The person asking is {u['name']}."
+            who = f" The person asking is {u['name']} ({u['email']}); their GitHub login is {config.gh_owner()}, and they own the fork {config.gh_owner()}/{config.gh_repo()}." if config.gh_owner() else f" The person asking is {u['name']}."
         except Exception:
             pass
         return (f"\n\nGraph in scope: {t['services']} services ({t['exposed_services']} internet-facing), {t['packages']} packages, "

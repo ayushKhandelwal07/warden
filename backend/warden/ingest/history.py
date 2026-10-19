@@ -1,4 +1,4 @@
-"""Git history of the demo repo -> Commit, File, Person, PullRequest (+ AUTHORED, TOUCHES,
+"""Git history of the project's repo -> Commit, File, Person, PullRequest (+ AUTHORED, TOUCHES,
 CONTAINS, OPENED, BELONGS_TO). Read from the local clone, so no GitHub API rate limits.
 
 Privacy: we keep public display names and GitHub logins (from noreply addresses) only.
@@ -21,7 +21,15 @@ def _person(name: str, email: str) -> dict:
     return {"key": key, "name": name.strip(), "login": login, "is_bot": bool(BOT_RE.search(name) or BOT_RE.search(email or ""))}
 
 
-def file_service(path: str, services: set[str]) -> str | None:
+def file_service(path: str, services: set[str], prefixes: dict[str, str | None] | None = None) -> str | None:
+    """The service a file belongs to: the deepest service folder that holds it, or the service's own manifest."""
+    if prefixes:
+        best = None
+        for svc, prefix in prefixes.items():
+            if prefix is not None and path.startswith(prefix) and (best is None or len(prefix) > len(prefixes[best] or "")):
+                best = svc
+        if best:
+            return best
     parts = path.split("/")
     if len(parts) >= 2 and parts[0] == "src" and parts[1] in services:
         return parts[1]
@@ -33,10 +41,14 @@ def file_service(path: str, services: set[str]) -> str | None:
     return None
 
 
-def parse_history(services: list[dict], since: str = config.HISTORY_SINCE, ref: str = "HEAD") -> dict:
+def parse_history(services: list[dict], since: str | None = None, ref: str = "HEAD", limit: int = 3000) -> dict:
     names = {s["name"] for s in services}
+    # The demo reads a fixed window; another repo keeps its last few years (and at most `limit` commits).
+    since = since or (config.HISTORY_SINCE if config.is_demo_source() else "3 years ago")
+    prefixes = {s["name"]: s.get("path_prefix") for s in services}
+    manifests = {s["manifest"]: s["name"] for s in services if s.get("manifest")}
     out = git(
-        "log", ref, f"--since={since}", "--no-merges", "--no-renames", "--name-only",
+        "log", ref, f"--since={since}", f"--max-count={limit}", "--no-merges", "--no-renames", "--name-only",
         f"--format={END}%H{SEP}%an{SEP}%ae{SEP}%at{SEP}%s",
     )
     people, commits, files, touches, prs = {}, [], {}, [], {}
@@ -60,14 +72,14 @@ def parse_history(services: list[dict], since: str = config.HISTORY_SINCE, ref: 
                     "title": PR_RE.sub("", subject).strip()[:300],
                     "merged_at": ts,
                     "author": p["key"],
-                    "url": f"{config.UPSTREAM_WEB}/pull/{pr_number}",
+                    "url": f"{config.pr_web()}/pull/{pr_number}",
                     "state": "merged",
                 },
             )
         for path in (x.strip() for x in paths):
             if not path:
                 continue
-            files.setdefault(path, {"path": path, "service": file_service(path, names)})
+            files.setdefault(path, {"path": path, "service": manifests.get(path) or file_service(path, names, prefixes)})
             touches.append({"sha": sha, "path": path})
     return {
         "people": list(people.values()),

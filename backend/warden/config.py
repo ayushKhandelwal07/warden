@@ -47,15 +47,74 @@ DATA_DIR = BACKEND_DIR / "data"
 RAW_DIR = DATA_DIR / "raw"
 REPO_DIR = RAW_DIR / "repo"
 CACHE_DIR = RAW_DIR / "cache"
+REPOS_DIR = RAW_DIR / "repos"  # one checkout per project that was built from its own repository
 ORG_DIR = BACKEND_DIR / "org"
 
 # Upstream URL used for links in evidence (PRs, files). Never written to.
 UPSTREAM_WEB = "https://github.com/GoogleCloudPlatform/microservices-demo"
+# Display name of the shared demo project: the fork's repository name.
+DEMO_PROJECT_NAME = PROJECT_REPO_URL.rstrip("/").removesuffix(".git").rsplit("/", 1)[-1]
 
 
 # The project graph for the current request. Set by the API middleware from the signed-in user's project, so every
 # graph call underneath (tools, planner, sync, watcher, agent) is scoped without passing it through each function.
 CURRENT_GRAPH: ContextVar[str | None] = ContextVar("warden_graph", default=None)
+
+
+# The GitHub repo the current project acts on (set per request from the project's saved choice); falls back to .env.
+CURRENT_GITHUB: ContextVar[dict | None] = ContextVar("warden_github", default=None)
+
+
+# Where the current project's code is checked out and linked: {"dir", "clone", "web", "pr_web"}. None = the shared
+# demo checkout (microservices-demo at DEMO_REF). Set per request from the project, like CURRENT_GRAPH.
+CURRENT_SOURCE: ContextVar[dict | None] = ContextVar("warden_source", default=None)
+
+
+def _src(key: str, fallback):
+    return ((CURRENT_SOURCE.get() or {}).get(key)) or fallback
+
+
+def repo_dir() -> Path:
+    return Path(_src("dir", REPO_DIR))
+
+
+def source_ref() -> str:
+    """The branch or tag the project's graph is read from."""
+    return _src("ref", DEMO_REF)
+
+
+def clone_url() -> str:
+    return _src("clone", DEMO_REPO_URL)
+
+
+def source_web() -> str:
+    """Base URL for file links in evidence. The demo graph links into the fork (it shares the upstream commits)."""
+    return _src("web", PROJECT_REPO_URL.removesuffix(".git"))
+
+
+def pr_web() -> str:
+    """Base URL for pull request links. The demo history is upstream's, so its PR numbers are upstream's."""
+    return _src("pr_web", UPSTREAM_WEB)
+
+
+def is_demo_source() -> bool:
+    return CURRENT_SOURCE.get() is None
+
+
+def _gh(key: str, fallback):
+    return ((CURRENT_GITHUB.get() or {}).get(key)) or fallback
+
+
+def gh_owner() -> str | None:
+    return _gh("owner", GITHUB_OWNER)
+
+
+def gh_repo() -> str:
+    return _gh("repo", GITHUB_REPO)
+
+
+def gh_base() -> str | None:
+    return _gh("base", GITHUB_BASE)
 
 
 def org_graph_name(tenant: str = TENANT) -> str:

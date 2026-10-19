@@ -81,7 +81,11 @@ class Project(Base):
     graph: Mapped[str] = mapped_column(String(64))
     repo_url: Mapped[str | None] = mapped_column(String(255), nullable=True)
     ref: Mapped[str | None] = mapped_column(String(120), nullable=True)
-    status: Mapped[str] = mapped_column(String(32), default="ready")  # ready | ingesting | failed
+    # The GitHub repo and branch this project acts on (PRs, watcher, repo tools). Empty = the .env defaults.
+    gh_owner: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    gh_repo: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    gh_base: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), default="ready")  # ready | queued | building | failed (see build.py)
     status_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     org: Mapped[Org] = relationship(back_populates="projects")

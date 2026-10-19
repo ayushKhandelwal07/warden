@@ -31,11 +31,12 @@ def _change_kind(title: str, files: list[str]) -> tuple[str, str | None]:
 
 
 def _services_from_files(files: list[str]) -> dict[str, list[str]]:
-    rows = Trace().ro("MATCH (s:Service) RETURN s.name AS name")
+    rows = Trace().ro("MATCH (s:Service) RETURN s.name AS name, s.path_prefix AS prefix")
     names = {r["name"] for r in rows}
+    prefixes = {r["name"]: r["prefix"] for r in rows}
     out: dict[str, list[str]] = {}
     for f in files:
-        s = file_service(f, names)
+        s = file_service(f, names, prefixes)
         if s:
             out.setdefault(s, []).append(f)
     return out
@@ -114,8 +115,9 @@ RETURN pr.title AS title, pr.url AS url, collect(DISTINCT f.path) AS files""",
         points.append((2 if sev == "SEV1" else 1, f"the same kind of change caused {same_kind[0]['incident']} ({sev})"))
     if chokepoints:
         points.append((1, f"changes a choke point ({', '.join(chokepoints)}; betweenness)"))
-    if "frontend" in services:
-        points.append((1, "changes the internet-facing frontend directly"))
+    public = {r["n"] for r in Trace().ro("MATCH (s:Service)-[:EXPOSED_VIA]->(:Ingress) RETURN DISTINCT s.name AS n")}
+    if direct_public := sorted(set(services) & public):
+        points.append((1, f"changes the internet-facing {', '.join(direct_public)} directly"))
     elif hidden_public := sorted(s for s in hidden if deep[s]["internet_facing"]):
         points.append((1, f"reaches internet-facing {', '.join(hidden_public)} only through other services (depth > 1)"))
     if len(services) >= 4:

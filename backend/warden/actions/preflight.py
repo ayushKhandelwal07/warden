@@ -45,7 +45,7 @@ def run(patches: list[dict]) -> list[dict]:
         src_dir = Path(changed[0]["path"]).parent
         with tempfile.TemporaryDirectory() as tmp:
             work = Path(tmp) / "svc"
-            shutil.copytree(config.REPO_DIR / src_dir, work, ignore=shutil.ignore_patterns("node_modules", ".git", "vendor"))
+            shutil.copytree(config.repo_dir() / src_dir, work, ignore=shutil.ignore_patterns("node_modules", ".git", "vendor"))
             for f in changed:
                 (work / Path(f["path"]).name).write_text(f["content"], encoding="utf-8")
             for label, cmd, tool in steps_for([f["path"] for f in changed]):

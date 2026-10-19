@@ -61,6 +61,9 @@ class ProjectScope:
         if isinstance(p, dict):
             tokens.append((CURRENT_PROJECT, CURRENT_PROJECT.set(p)))
             tokens.append((config.CURRENT_GRAPH, config.CURRENT_GRAPH.set(p["graph"])))
+            tokens.append((config.CURRENT_SOURCE, config.CURRENT_SOURCE.set(workspaces.source_for(p))))
+            if p.get("gh_owner"):
+                tokens.append((config.CURRENT_GITHUB, config.CURRENT_GITHUB.set({"owner": p["gh_owner"], "repo": p["gh_repo"], "base": p["gh_base"]})))
         try:
             await self.app(scope, receive, send)
         finally:
@@ -218,15 +221,60 @@ def accept_invite(token: str):
 
 @router.post("/projects")
 def create_project(body: dict = Body(default_factory=dict)):
+    """A project built from a repository ({owner, repo, base}): the graph builds in the background and the project's
+    status reports each step. Without a repository it starts as a copy of the microservices-demo sample graph."""
+    from warden import build
+    from warden.actions import github
+
+    owner, repo, base = (str(body.get(k) or "").strip() for k in ("owner", "repo", "base"))
     try:
+        chosen = None
+        if owner or repo or base:
+            chosen = github.validate_choice(owner, repo, base)
         with session() as s:
-            p = workspaces.create_project(s, user()["id"], str(body.get("org_id") or ""), str(body.get("name") or ""))
+            p = workspaces.create_project(s, user()["id"], str(body.get("org_id") or ""), str(body.get("name") or ""),
+                                          {"owner": chosen["owner"], "repo": chosen["name"], "base": base} if chosen else None)
             s.flush()
-            return {"project": workspaces.project_json(p), **workspaces.me(s, s.get(User, user()["id"]))}
+            pid = p.id
+            out = {"project": workspaces.project_json(p), **workspaces.me(s, s.get(User, user()["id"]))}
     except workspaces.AccessError as e:
         return _err(403, str(e))
-    except ValueError as e:
+    except (ValueError, PermissionError, github.GitHubNotConfigured) as e:
         return _err(400, str(e))
+    if chosen:
+        build.start(pid)
+    return out
+
+
+@router.post("/projects/{project_id}/rebuild")
+def rebuild_project(project_id: str):
+    """Re-reads the project's repository from scratch (after a failed build, or to start over)."""
+    from warden import build
+    from warden.db.models import Project
+
+    with session() as s:
+        p = s.get(Project, project_id)
+        if not p or workspaces.role_in(s, user()["id"], p.org_id) not in ("owner", "admin"):
+            return _err(403, "Only an owner or admin of the team can rebuild this project.")
+        if not workspaces.own_source(workspaces.project_json(p)):
+            return _err(400, "This project reads the shared microservices-demo graph. Choose a repository for it first.")
+        if not build.running(p.id):
+            p.status, p.status_detail = "queued", "Waiting to rebuild the graph"
+        out = workspaces.project_json(p)
+    build.start(project_id)
+    return out
+
+
+@router.get("/projects/{project_id}")
+def get_project(project_id: str):
+    """One project, for polling its build status."""
+    from warden.db.models import Project
+
+    with session() as s:
+        p = s.get(Project, project_id)
+        if not p or not workspaces.role_in(s, user()["id"], p.org_id):
+            return _err(403, "You don't have access to this project.")
+        return workspaces.project_json(p)
 
 
 @router.delete("/projects/{project_id}")

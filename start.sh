@@ -32,7 +32,7 @@ if [ "${1:-}" = "--test" ]; then "$PY" -m pytest -q tests; exit $?; fi
 step "Building the graph if it's empty"
 for _ in $(seq 15); do "$PY" -c "from warden.graph.client import db; db().list_graphs()" 2>/dev/null && break; sleep 1; done
 "$PY" -m warden.ingest.bootstrap
-[ "${1:-}" = "--reset" ] && "$PY" -c "from warden import sync; print(sync.reset())"
+[ "${1:-}" = "--reset" ] && "$PY" -m warden.prepare
 
 step "Starting the API (:8000) and the website (:5173); Ctrl+C stops both"
 "$PY" -m uvicorn warden.api.app:app --port 8000 &

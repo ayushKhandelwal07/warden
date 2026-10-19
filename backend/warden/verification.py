@@ -76,7 +76,7 @@ def build(a: dict) -> dict:
             merged = {x["number"] for x in github.list_prs("all", 50) if x["merged"] and x["number"] in ours}
             for n in ours:
                 checks[n] = github.pr_checks(n)
-            refreshed = github.branch_head(config.GITHUB_BASE or "main") == sync.current_ref().get("sha")
+            refreshed = github.branch_head(config.gh_base() or "main") == sync.current_ref().get("sha")
         except Exception as e:  # GitHub being unreachable is shown, not hidden
             checks = {x["number"]: {"state": "none", "runs": [], "error": str(e)[:120]} for x in prs}
     still = {(f["vuln"], f["service"]) for f in sync._findings(config.org_graph_name()).values()}

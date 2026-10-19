@@ -54,7 +54,7 @@ export function ComparePlans({ onFiled, embedded }: { onFiled: (blocked: string 
         </label>
         <label className="flex flex-col gap-1 text-[12px] text-muted">
           Frozen services
-          <input value={frozen} onChange={(e) => setFrozen(e.target.value)} placeholder="e.g. paymentservice" className="h-9 w-44 rounded-full border border-line bg-bg px-3 text-[13px] text-ink placeholder:text-muted" />
+          <input value={frozen} onChange={(e) => setFrozen(e.target.value)} placeholder="comma-separated names" className="h-9 w-44 rounded-full border border-line bg-bg px-3 text-[13px] text-ink placeholder:text-muted" />
         </label>
         <label className="flex h-9 items-center gap-2 text-[13px]">
           <input type="checkbox" checked={!!cons.no_major} onChange={(e) => setCons({ ...cons, no_major: e.target.checked })} /> No major bumps

@@ -17,7 +17,8 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 import yaml
 
-from warden import agent, config, conversations, db, impact, mcp_client, planner, proposals, replay, sync, watch
+from warden import agent, config, conversations, db, impact, mcp_client, planner, proposals, replay, sync, watch, workspaces
+from warden.db.models import Project
 from warden.api import accounts
 from warden.tools.base import ToolError
 from warden.actions import approvals, github, patches
@@ -27,6 +28,9 @@ from warden.tools import REGISTRY, run_tool
 @asynccontextmanager
 async def lifespan(_app):
     await asyncio.to_thread(db.init_db)
+    from warden import build
+
+    await asyncio.to_thread(build.resume_interrupted)  # graph builds that were cut off by a restart
     # One MCP stdio session for the agent, opened and closed in the same task.
     try:
         await agent.MCP.start()
@@ -43,7 +47,7 @@ app = FastAPI(title="Warden API", lifespan=lifespan)
 app.add_middleware(accounts.ProjectScope)
 # Added last = outermost, so even a 401 from the scope middleware carries CORS headers.
 app.add_middleware(CORSMiddleware, allow_origins=config.CORS_ORIGINS, allow_credentials=True,
-                   allow_methods=["GET", "POST", "PATCH", "DELETE"], allow_headers=["Content-Type", "X-Project"])
+                   allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE"], allow_headers=["Content-Type", "X-Project"])
 app.include_router(accounts.router)
 
 BROWSER_URL = os.getenv("FALKORDB_BROWSER_URL", "http://localhost:3000")
@@ -58,9 +62,32 @@ def health():
     return {"status": "ok", "graph": config.org_graph_name(), "browser_url": BROWSER_URL, **h}
 
 
+def _example_names() -> dict:
+    from warden import cache, examples
+
+    return cache.cached("examples", {}, examples.names)[0]
+
+
 @app.get("/api/tools")
 def list_tools():
-    return [t.meta() for t in REGISTRY.values()]
+    """Every tool, with example arguments that name things in this project's graph."""
+    from warden import examples
+
+    try:
+        n = _example_names()
+    except Exception:  # an empty or unreachable graph: the generic examples are still shown
+        return [t.meta() for t in REGISTRY.values()]
+    return [{**t.meta(), "example": examples.localize(t.example, n)} for t in REGISTRY.values()]
+
+
+@app.get("/api/examples")
+def example_names():
+    """Names from this project's graph for suggested questions and form defaults (a service worth protecting, a
+    service that calls it, an internet-facing one, the most sensitive data, the top advisory and its package)."""
+    try:
+        return _example_names()
+    except Exception as e:
+        return JSONResponse(status_code=503, content={"error": f"{type(e).__name__}: {str(e)[:200]}"})
 
 
 @app.post("/api/tools/{name}")
@@ -549,6 +576,113 @@ def github_status():
         return {"configured": True, "target": github.target()}
     except PermissionError as e:
         return {"configured": False, "reason": str(e)}
+
+
+@app.get("/api/github/repos")
+def github_repos():
+    """The signed-in token's repositories that Warden may act on (push access, never upstream)."""
+    try:
+        return [r for r in github.list_repos() if r["push"]]
+    except github.GitHubNotConfigured as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+    except Exception as e:
+        return JSONResponse(status_code=502, content={"error": f"{type(e).__name__}: {str(e)[:200]}"})
+
+
+@app.get("/api/github/branches")
+def github_branches(repo: str):
+    owner, _, name = repo.partition("/")
+    try:
+        return github.list_branches(owner, name)
+    except PermissionError as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+    except Exception as e:
+        return JSONResponse(status_code=502, content={"error": f"{type(e).__name__}: {str(e)[:200]}"})
+
+
+def _graph_files(graph_name: str) -> list[str]:
+    """A few files the project's graph was read from (manifests and lockfiles): the chosen repo must have them."""
+    from warden.graph.client import ro
+
+    rows, _ = ro("MATCH (s:Service)-[d:DEPENDS_ON {direct: true}]->(:Package) RETURN DISTINCT s.source_url AS u, d.manifest AS m LIMIT 40", graph_name=graph_name)
+    files = []
+    for r in rows:
+        for f in (r["u"].split("/blob/", 1)[1].split("/", 1)[1] if r["u"] and "/blob/" in r["u"] else None, r["m"]):
+            if f and f not in files:
+                files.append(f)
+    return files[:3]
+
+
+@app.get("/api/github/check")
+def github_check():
+    """Does the repository this project acts on contain the code its graph describes?"""
+    if not github.configured():
+        return {"configured": False}
+    p = accounts.project() or {}
+    if p and workspaces.own_source(p) and p["repo_url"].lower() == f"https://github.com/{config.gh_owner()}/{config.gh_repo()}".lower():
+        return {"configured": True, "target": github.target(), "checked": [], "missing": [], "matches": True, "built_from_repo": True}
+    try:
+        files = _graph_files(config.org_graph_name())
+        missing = github.missing_paths(config.gh_owner(), config.gh_repo(), config.gh_base() or "main", files)
+        return {"configured": True, "target": github.target(), "checked": files, "missing": missing, "matches": not missing}
+    except Exception as e:
+        return JSONResponse(status_code=502, content={"error": f"{type(e).__name__}: {str(e)[:200]}"})
+
+
+@app.put("/api/projects/{pid}/github")
+def set_project_github(pid: str, body: dict = Body(default_factory=dict)):
+    """Choose the repository and branch this project opens PRs on, watches and answers questions about.
+
+    A project with its own graph is rebuilt from the new repository or branch (in the background). The shared demo
+    project keeps the microservices-demo graph everyone uses, so it only accepts a fork of that code."""
+    from warden import build
+
+    owner, repo, base = (str(body.get(k) or "").strip() for k in ("owner", "repo", "base"))
+    try:
+        chosen = github.validate_choice(owner, repo, base)
+        with db.session() as s:
+            p0 = s.get(Project, pid)
+            shared = bool(p0 and p0.slug == workspaces.DEMO_PROJECT_SLUG)
+            graph_name = p0.graph if p0 else None
+        missing = github.missing_paths(owner, repo, base, _graph_files(graph_name)) if shared and graph_name else []
+        if missing:
+            return JSONResponse(status_code=400, content={"error": (
+                f"{owner}/{repo} does not contain the code the shared microservices-demo graph was built from (missing: {', '.join(missing)}). "
+                "Pick a fork of microservices-demo here, or create a new project to build a graph from this repository.")})
+    except ValueError as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+    except (github.GitHubNotConfigured, PermissionError) as e:
+        return JSONResponse(status_code=400, content={"error": str(e)})
+    except Exception as e:
+        return JSONResponse(status_code=502, content={"error": f"{type(e).__name__}: {str(e)[:200]}"})
+    rebuild = False
+    with db.session() as s:
+        p = s.get(Project, pid)
+        if not p or workspaces.role_in(s, accounts.user()["id"], p.org_id) not in ("owner", "admin"):
+            return JSONResponse(status_code=403, content={"error": "Only an owner or admin of the team can change this."})
+        if shared:
+            p.gh_owner, p.gh_repo, p.gh_base = chosen["owner"], chosen["name"], base
+            p.repo_url = f"https://github.com/{chosen['owner']}/{chosen['name']}"
+        else:
+            cur = workspaces.project_json(p)
+            same = workspaces.own_source(cur) and cur["repo_url"].lower() == f"https://github.com/{chosen['owner']}/{chosen['name']}".lower() and cur["ref"] == base
+            if same:
+                p.gh_owner, p.gh_repo, p.gh_base = chosen["owner"], chosen["name"], base
+            else:
+                workspaces.point_at_repo(p, chosen["owner"], chosen["name"], base)
+                rebuild = True
+        out = workspaces.project_json(p)
+    if rebuild:
+        build.start(pid)
+        return out
+    token = config.CURRENT_GITHUB.set({"owner": chosen["owner"], "repo": chosen["name"], "base": base})
+    try:
+        watch.set_enabled(False)  # the baseline belongs to the old repo; switch it on again when ready
+    except Exception:
+        pass
+    finally:
+        config.CURRENT_GITHUB.reset(token)
+    return out
 
 
 _PUBLIC_CACHE: dict = {}

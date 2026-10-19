@@ -19,6 +19,8 @@ def init_db():
     with engine.begin() as conn:
         conn.execute(text("SELECT pg_advisory_xact_lock(7240611)"))
         Base.metadata.create_all(conn)
+        for col, width in ("gh_owner", 80), ("gh_repo", 120), ("gh_base", 120):  # create_all never alters an existing table
+            conn.execute(text(f"ALTER TABLE projects ADD COLUMN IF NOT EXISTS {col} VARCHAR({width})"))
         with Session(bind=conn) as s:
             ensure_demo_workspace(s)
             s.flush()

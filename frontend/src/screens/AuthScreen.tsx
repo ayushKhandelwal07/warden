@@ -67,7 +67,7 @@ export function AuthScreen({ mode }: { mode: "login" | "signup" }) {
               ? "Log in to your team's security graph."
               : info
                 ? `You'll join ${info.org_name} and every project in it.`
-                : "You'll join the Google Microservices project, ready to ask."}
+                : "You'll join the shared microservices-demo project, ready to ask."}
           </p>
           {info && (
             <div className="mt-6 flex items-center gap-3 rounded-card border border-line p-4 text-small">

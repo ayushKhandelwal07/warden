@@ -49,7 +49,7 @@ try {
 
     if ($Reset) {
         Step "Resetting to the clean demo state"
-        & $py -c "from warden import sync; print(sync.reset())"
+        & $py -m warden.prepare
     }
 } finally { Pop-Location }
 

@@ -17,7 +17,6 @@ import hashlib
 import json
 import re
 import time
-from pathlib import Path
 
 from warden import config
 from warden.graph.client import ro, rw
@@ -127,7 +126,7 @@ def check_decisions(decisions: list[dict], still: set[tuple]) -> list[dict]:
 # ---- gathering from the graph and the checkout --------------------------------------------------------------------
 
 def _read(rel: str) -> str | None:
-    p = Path(config.REPO_DIR) / rel
+    p = config.repo_dir() / rel
     return p.read_text(encoding="utf-8") if p.exists() else None
 
 

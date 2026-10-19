@@ -139,7 +139,7 @@ export function BaselineCompare({ data }: { data: Baseline }) {
         {full ? "Show fewer" : `Show the full top ${data.n}, with the reason for each`} <ChevronDown size={13} className={full ? "rotate-180" : ""} />
       </button>
       <p className="border-t border-line px-4 py-2.5 text-[12px] text-muted">
-        Severity-only ties break by advisory id. The graph score is {data.method.graph}. Neither ranking is tuned to the other.
+        Same exposures in both lists. Warden's score weighs severity, known exploitation, distance from the internet and the data a service reads.
       </p>
     </section>
   );

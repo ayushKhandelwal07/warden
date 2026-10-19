@@ -18,15 +18,15 @@ class GitHubNotConfigured(Exception):
 
 
 def configured() -> bool:
-    return bool(config.GITHUB_TOKEN and config.GITHUB_OWNER and config.GITHUB_REPO)
+    return bool(config.GITHUB_TOKEN and config.gh_owner() and config.gh_repo())
 
 
 def target() -> str:
     if not configured():
         raise GitHubNotConfigured("GITHUB_TOKEN, GITHUB_OWNER and GITHUB_REPO must be set in .env to act on the fork")
-    if config.GITHUB_OWNER.lower() == UPSTREAM_OWNER.lower():
+    if config.gh_owner().lower() == UPSTREAM_OWNER.lower():
         raise PermissionError("Refusing to write to the upstream repository; set GITHUB_OWNER to your fork's owner")
-    return f"{config.GITHUB_OWNER}/{config.GITHUB_REPO}"
+    return f"{config.gh_owner()}/{config.gh_repo()}"
 
 
 def _client() -> httpx.Client:
@@ -47,7 +47,7 @@ def open_pr(branch: str, files: list[dict], title: str, body: str) -> dict:
     """Creates `branch` from the fork's default branch, commits `files` ({path, content}), opens a PR."""
     repo = target()
     with _client() as gh:
-        base = config.GITHUB_BASE or _ok(gh.get(f"/repos/{repo}"))["default_branch"]
+        base = config.gh_base() or _ok(gh.get(f"/repos/{repo}"))["default_branch"]
         base_sha = _ok(gh.get(f"/repos/{repo}/git/ref/heads/{base}"))["object"]["sha"]
         _ok(gh.post(f"/repos/{repo}/git/refs", json={"ref": f"refs/heads/{branch}", "sha": base_sha}))
         for f in files:
@@ -103,6 +103,48 @@ def get_pr(number: int) -> dict:
             "author": pr["user"]["login"], "files": [f["filename"] for f in files]}
 
 
+def list_repos() -> list[dict]:
+    """The token owner's repositories (newest push first), without anything under the upstream owner. Read-only."""
+    if not config.GITHUB_TOKEN:
+        raise GitHubNotConfigured("GITHUB_TOKEN must be set in .env to list your repositories")
+    with _client() as gh:
+        rows = _ok(gh.get("/user/repos", params={"per_page": 100, "sort": "pushed", "affiliation": "owner,collaborator,organization_member"}))
+    return [
+        {"full_name": r["full_name"], "owner": r["owner"]["login"], "name": r["name"], "fork": bool(r["fork"]), "default_branch": r["default_branch"],
+         "push": bool((r.get("permissions") or {}).get("push")), "private": bool(r["private"])}
+        for r in rows
+        if r["owner"]["login"].lower() != UPSTREAM_OWNER.lower()
+    ]
+
+
+def missing_paths(owner: str, repo: str, ref: str, paths: list[str]) -> list[str]:
+    """Which of these files are absent from owner/repo at ref (GitHub contents API, read-only)."""
+    with _client() as gh:
+        return [p for p in paths if gh.get(f"/repos/{owner}/{repo}/contents/{p}", params={"ref": ref}).status_code != 200]
+
+
+def list_branches(owner: str, repo: str) -> list[str]:
+    if not config.GITHUB_TOKEN:
+        raise GitHubNotConfigured("GITHUB_TOKEN must be set in .env")
+    if owner.lower() == UPSTREAM_OWNER.lower():
+        raise PermissionError("Refusing to use the upstream repository")
+    with _client() as gh:
+        return [b["name"] for b in _ok(gh.get(f"/repos/{owner}/{repo}/branches", params={"per_page": 100}))]
+
+
+def validate_choice(owner: str, repo: str, base: str) -> dict:
+    """A repository the token can push to (PRs and the watcher act on it) and one of its branches; ValueError says
+    what is wrong. Returns the repo as list_repos describes it."""
+    if not (owner and repo and base):
+        raise ValueError("Choose a repository and a branch.")
+    chosen = {r["full_name"].lower(): r for r in list_repos()}.get(f"{owner}/{repo}".lower())
+    if not chosen or not chosen["push"]:
+        raise ValueError("That repository is not one your token can push to.")
+    if base not in list_branches(chosen["owner"], chosen["name"]):
+        raise ValueError(f"The branch '{base}' does not exist on {owner}/{repo}.")
+    return chosen
+
+
 def parse_checks(runs: dict, status: dict) -> dict:
     """Pure: GitHub check-runs + combined commit status -> one verdict.
     state: success (everything finished and passed) · failure (any failed) · pending (anything still running) · none (no checks configured)."""
@@ -156,7 +198,7 @@ def read_user(login: str) -> dict:
 
 def role_of(login: str) -> str:
     """The person's standing on the fork: owner, collaborator permission, or contributor."""
-    if login.lower() == (config.GITHUB_OWNER or "").lower():
+    if login.lower() == (config.gh_owner() or "").lower():
         return "owner of the fork (admin)"
     repo = target()
     with _client() as gh:
@@ -174,7 +216,7 @@ def role_of(login: str) -> str:
 def people() -> list[dict]:
     """The owner, collaborators (with their permission) and contributors of the fork."""
     repo = target()
-    out: dict[str, dict] = {config.GITHUB_OWNER: {"login": config.GITHUB_OWNER, "role": "owner of the fork (admin)"}}
+    out: dict[str, dict] = {config.gh_owner(): {"login": config.gh_owner(), "role": "owner of the fork (admin)"}}
     with _client() as gh:
         r = gh.get(f"/repos/{repo}/collaborators", params={"per_page": 30})
         if r.status_code == 200:

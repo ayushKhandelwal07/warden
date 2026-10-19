@@ -9,7 +9,7 @@ export function TryIt({ onBuild, building }: { onBuild: () => void; building: bo
     {
       n: 1,
       title: "Ask what to fix first",
-      body: "The answer comes with the graph path behind it.",
+      body: "See the answer and the path behind it.",
       action: (
         <Link to={to("/ask?q=What%20should%20we%20fix%20first%3F")} className="inline-flex items-center gap-1 font-medium hover:opacity-80">
           Ask <ArrowRight size={13} />
@@ -19,7 +19,7 @@ export function TryIt({ onBuild, building }: { onBuild: () => void; building: bo
     {
       n: 2,
       title: "Build a fix plan",
-      body: "Rehearsed on a copy of the graph, then filed for approval.",
+      body: "Get the upgrades that remove the most risk.",
       action: (
         <button onClick={onBuild} disabled={building} className="inline-flex items-center gap-1 font-medium hover:opacity-80 disabled:opacity-50">
           {building ? "Rehearsing…" : "Build"} <ArrowRight size={13} />
@@ -28,8 +28,8 @@ export function TryIt({ onBuild, building }: { onBuild: () => void; building: bo
     },
     {
       n: 3,
-      title: "Try an unsafe plan",
-      body: "Watch the gate block a bad fix instead of trusting it.",
+      title: "Try a bad plan",
+      body: "See Warden block an unsafe fix.",
       action: (
         <a href="#fix" className="inline-flex items-center gap-1 font-medium hover:opacity-80">
           Go to it <ArrowRight size={13} />
@@ -38,8 +38,8 @@ export function TryIt({ onBuild, building }: { onBuild: () => void; building: bo
     },
     {
       n: 4,
-      title: "Check Approvals",
-      body: "Gate results, before and after, and the proof timeline.",
+      title: "Review and approve",
+      body: "Check the result, then approve.",
       action: (
         <Link to={to("/approvals")} className="inline-flex items-center gap-1 font-medium hover:opacity-80">
           Open <ArrowRight size={13} />

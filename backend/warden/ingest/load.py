@@ -13,7 +13,7 @@ STRUCTURAL = ["CALLS", "EXPOSED_VIA", "REACHES", "DEPENDS_ON", "REQUIRES", "AFFE
 
 
 def blob_url(ref: str, path: str) -> str:
-    return f"{config.UPSTREAM_WEB}/blob/{ref}/{path}"
+    return f"{config.source_web()}/blob/{ref}/{path}"
 
 
 def load_topology(m: dict, descriptions: dict, run: int, ref: str, g: str | None = None):
@@ -28,8 +28,8 @@ def load_topology(m: dict, descriptions: dict, run: int, ref: str, g: str | None
     unwind(
         f"""MATCH (s:Service {{name: row.service}}), (net:Internet {{name: 'internet'}})
         MERGE (ing:Ingress {{name: row.name}}) SET ing.kind = row.kind, ing.source_url = row.url
-        MERGE (s)-[e:EXPOSED_VIA]->(ing) SET e.run = {run}, e.source_url = row.url
-        MERGE (net)-[r:REACHES]->(ing) SET r.run = {run}""",
+        MERGE (s)-[e:EXPOSED_VIA]->(ing) SET e.run = {run}, e.source_url = row.url, e.kind = row.kind
+        MERGE (net)-[r:REACHES]->(ing) SET r.run = {run}, r.kind = row.kind""",
         [{**i, "url": blob_url(ref, i["manifest"])} for i in m["ingresses"]],
         g,
     )
@@ -131,6 +131,19 @@ def load_curated(teams: list, assets: list, policies: list, run: int, g: str | N
     )
 
 
+def load_inferred_assets(assets: list[dict], run: int, g: str | None = None):
+    """Sensitive data inferred from dependencies (a repo without curated org data). The READS edge names its evidence."""
+    unwind(
+        f"""MERGE (d:DataAsset {{name: row.name}})
+        SET d.sensitivity = row.sensitivity, d.weight = row.weight, d.description = row.description, d.source_type = 'inferred'
+        WITH d, row UNWIND row.reads AS r
+        MATCH (s:Service {{name: r.service}})
+        MERGE (s)-[e:READS]->(d) SET e.source_type = 'inferred', e.evidence = r.evidence, e.run = {run}""",
+        assets,
+        g,
+    )
+
+
 def load_incidents(incidents: list[dict], run: int, g: str | None = None):
     """Curated, synthetic incidents: tied to services and a change kind/package, never to a real PR or person."""
     unwind(
@@ -196,14 +209,16 @@ def derive_expertise(g: str | None = None):
     )
 
 
-def record_run(run: int, ref: str, sha: str, kev: dict, g: str | None = None):
-    """Provenance for the UI status bar and the closed loop: which commit and KEV feed the graph reflects."""
+def record_run(run: int, ref: str, sha: str, kev: dict, g: str | None = None, source: str | None = None, org: str | None = None):
+    """Provenance for the UI status bar and the closed loop: which repo, commit and KEV feed the graph reflects, where
+    the services came from (kubernetes | compose | code) and whether the org data is curated or inferred."""
     rw(
         """MATCH (c:Catalog {name: 'CISA KEV'})
         SET c.catalog_version = $kv, c.released = $kr, c.entries = $kc
         MERGE (r:IngestRun {id: $run})
-        SET r.ref = $ref, r.sha = $sha, r.at = $run, r.kev_version = $kv""",
-        {"run": run, "ref": ref, "sha": sha, "kv": kev.get("version"), "kr": kev.get("released"), "kc": kev.get("count")},
+        SET r.ref = $ref, r.sha = $sha, r.at = $run, r.kev_version = $kv, r.repo = $repo, r.source = $source, r.org = $org""",
+        {"run": run, "ref": ref, "sha": sha, "kv": kev.get("version"), "kr": kev.get("released"), "kc": kev.get("count"),
+         "repo": config.source_web(), "source": source, "org": org},
         g,
     )
 

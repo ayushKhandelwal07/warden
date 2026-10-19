@@ -38,7 +38,7 @@ def _exists() -> bool:
 # ---------- state + events ----------
 
 def state() -> dict:
-    base = {"enabled": False, "interval": INTERVAL, "branch": config.GITHUB_BASE, "last_check": None, "last_status": "never checked", "busy": _lock.locked()}
+    base = {"enabled": False, "interval": INTERVAL, "branch": config.gh_base(), "last_check": None, "last_status": "never checked", "busy": _lock.locked()}
     if not _exists():
         return base
     rows, _ = ro("MATCH (w:Watcher {id: 'main'}) RETURN w", graph_name=_g())
@@ -53,7 +53,7 @@ def set_enabled(on: bool) -> dict:
     props: dict = {"enabled": on}
     if on and github.configured():
         try:  # from now on "changed" means the fork moved after this moment, not "differs from the demo checkout"
-            props["last_head"] = github.branch_head(config.GITHUB_BASE or "main")
+            props["last_head"] = github.branch_head(config.gh_base() or "main")
         except Exception:
             pass
     _set(**props)
@@ -80,15 +80,20 @@ def events(limit: int = 12) -> list[dict]:
 # ---------- the demo change (simulate real-world drift on the fork) ----------
 
 def set_exposure(service: str, public: bool) -> dict:
-    """Commit a one-line infra change to the fork's base branch: make a service public (or private again)."""
-    path = f"kubernetes-manifests/{service}.yaml"
+    """Commit a one-line infra change to the fork's base branch: make a service public (or private again).
+    The file is the Kubernetes manifest the graph read the service from."""
+    rows, _ = ro("MATCH (s:Service {name: $s}) RETURN s.source_url AS u", {"s": service})
+    url = rows[0]["u"] if rows else None
+    if not url or "/blob/" not in url or not url.endswith((".yaml", ".yml")):
+        raise ValueError(f"{service} has no Kubernetes manifest in this repository to change.")
+    path = url.split("/blob/", 1)[1].split("/", 1)[1]
     pattern = re.compile(rf"(kind: Service\s*\n\s*metadata:\s*\n\s*name: {re.escape(service)}\s*\n(?:[^\n]*\n)*?\s*type: )(\w+)")
 
     def transform(text: str) -> str:
         return pattern.sub(lambda m: m.group(1) + ("LoadBalancer" if public else "ClusterIP"), text, count=1)
 
     verb = "Expose" if public else "Un-expose"
-    res = github.edit_file(path, config.GITHUB_BASE, transform, f"{verb} {service} {'publicly' if public else 'again'} (Warden demo change)")
+    res = github.edit_file(path, config.gh_base(), transform, f"{verb} {service} {'publicly' if public else 'again'} (Warden demo change)")
     if res.get("changed"):
         event("change", f"{service} was made {'internet-facing' if public else 'internal again'} on the fork", res.get("url"))
     return res
@@ -124,7 +129,7 @@ def tick(force: bool = False) -> dict:
         if not github.configured():
             _set(last_check=_now(), last_status="GitHub is not connected, nothing to watch")
             return {"ok": False, "status": "GitHub is not connected"}
-        branch = config.GITHUB_BASE or "main"
+        branch = config.gh_base() or "main"
         head = github.branch_head(branch)
         built = state().get("last_head") or sync.current_ref().get("sha")
         out: dict = {"ok": True, "head": head, "synced": False, "proposals": []}
@@ -183,11 +188,24 @@ def tick(force: bool = False) -> dict:
 
 
 async def loop():
-    """Background task started with the API. Checks every INTERVAL seconds while the watcher is switched on."""
+    """Background task started with the API. Every INTERVAL seconds, checks each project whose watcher is switched on,
+    scoped to that project's graph, repository and checkout."""
+    from warden import workspaces
+
+    def check(p: dict):
+        with workspaces.scoped(p):
+            if state().get("enabled"):
+                tick()
+
     while True:
         await asyncio.sleep(INTERVAL)
         try:
-            if await asyncio.to_thread(lambda: state().get("enabled")):
-                await asyncio.to_thread(tick)
-        except Exception as e:  # never let the loop die
+            projects = await asyncio.to_thread(workspaces.ready_projects)
+        except Exception as e:
             print(f"watcher loop error: {e}")
+            continue
+        for p in projects:
+            try:
+                await asyncio.to_thread(check, p)
+            except Exception as e:  # never let the loop die
+                print(f"watcher loop error ({p['slug']}): {e}")

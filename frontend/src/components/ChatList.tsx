@@ -118,10 +118,12 @@ function Item({ c, base, active }: { c: Conversation; base: string; active: bool
 export function ChatList({ kind, base, label }: { kind: "ask" | "impact"; base: string; label: string }) {
   const { chatId, runId } = useParams();
   const current = chatId ?? runId;
+  const { slug } = useProject();
   const [items, setItems] = useState<Conversation[] | null>(null);
+  // Reloads when the open project changes: each project has its own chats.
   const load = useCallback(() => {
     api.conversations(kind).then(setItems, () => setItems([]));
-  }, [kind]);
+  }, [kind, slug]);
 
   useEffect(() => {
     load();

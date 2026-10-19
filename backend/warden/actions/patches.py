@@ -7,7 +7,7 @@ from warden import config
 
 
 def _read(path: str) -> str:
-    return (config.REPO_DIR / path).read_text(encoding="utf-8")
+    return (config.repo_dir() / path).read_text(encoding="utf-8")
 
 
 def _go_mod(text: str, name: str, old: str, new: str) -> str:
